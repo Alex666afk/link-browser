@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob: chrome-extension:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Link</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <div class="app">
+    <nav class="ribbon">
+      <div class="ribbon-top drag">
+        <button class="clickable-icon no-drag" data-action="toggle-sidebar" aria-label="Toggle sidebar" data-icon="panel-left"></button>
+      </div>
+      <div class="ribbon-actions">
+        <button class="clickable-icon" data-action="new-tab" aria-label="New tab (Ctrl+T)" data-icon="plus"></button>
+        <button class="clickable-icon" data-action="private-tab" aria-label="New private tab (Ctrl+Shift+N)" data-icon="incognito"></button>
+        <button class="clickable-icon" data-action="command-palette" aria-label="Open command palette (Ctrl+P)" data-icon="command"></button>
+        <button class="clickable-icon" data-action="quick-switcher" aria-label="Quick switcher (Ctrl+E)" data-icon="search"></button>
+        <button class="clickable-icon" data-action="protection" aria-label="Link Protect" data-icon="shield"></button>
+        <button class="clickable-icon" data-action="vpn" aria-label="VPN" data-icon="globe-lock"></button>
+        <button class="clickable-icon" data-action="import" aria-label="Import browser data" data-icon="import"></button>
+      </div>
+      <div class="ribbon-bottom">
+        <button class="clickable-icon" data-action="help" aria-label="Keyboard shortcuts" data-icon="help"></button>
+        <button class="clickable-icon" data-action="settings" aria-label="Settings (Ctrl+,)" data-icon="settings"></button>
+      </div>
+    </nav>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header drag">
+        <div class="sidebar-tabs no-drag" id="sidebar-tabs"></div>
+      </div>
+      <div class="nav-header" id="sidebar-nav"></div>
+      <div class="sidebar-content" id="sidebar-content"></div>
+    </aside>
+    <div class="sidebar-resize" id="sidebar-resize"></div>
+
+    <main class="workspace">
+      <div class="tab-strip drag" id="tab-strip">
+        <div class="tabs no-drag" id="tabs"></div>
+        <button class="clickable-icon new-tab-btn no-drag" data-action="new-tab" aria-label="New tab" data-icon="plus"></button>
+      </div>
+      <div class="view-header" id="view-header">
+        <div class="view-nav">
+          <button class="clickable-icon" id="btn-back" aria-label="Back (Alt+←)" data-icon="arrow-left"></button>
+          <button class="clickable-icon" id="btn-forward" aria-label="Forward (Alt+→)" data-icon="arrow-right"></button>
+          <button class="clickable-icon" id="btn-reload" aria-label="Reload (Ctrl+R)" data-icon="rotate-cw"></button>
+        </div>
+        <div class="omnibox" id="omnibox">
+          <button class="omnibox-engine" id="omnibox-engine" aria-label="Choose search engine"></button>
+          <span class="omnibox-icon" id="omnibox-icon"></span>
+          <input id="address" spellcheck="false" autocomplete="off" placeholder="Search or enter address">
+          <button class="clickable-icon omnibox-star" id="btn-star" aria-label="Bookmark this page (Ctrl+D)" data-icon="star"></button>
+          <div class="suggestions hidden" id="suggestions"></div>
+        </div>
+        <div class="view-actions">
+          <button class="mod-cta store-install hidden" id="btn-store-install">Add to Link</button>
+          <button class="clickable-icon hidden" id="btn-key" aria-label="Fill saved password" data-icon="key"></button>
+          <button class="clickable-icon shield-btn" id="btn-shield" aria-label="Link Protect" data-icon="shield"><span class="badge" id="shield-badge"></span></button>
+          <button class="clickable-icon vpn-btn" id="btn-vpn" aria-label="VPN" data-icon="globe-lock"></button>
+          <button class="clickable-icon" id="btn-extensions" aria-label="Extensions" data-icon="puzzle"></button>
+          <button class="clickable-icon" id="btn-menu" aria-label="Menu" data-icon="more-vertical"></button>
+        </div>
+      </div>
+      <div class="find-bar hidden" id="find-bar">
+        <input id="find-input" placeholder="Find in page" spellcheck="false">
+        <span class="find-count" id="find-count"></span>
+        <button class="clickable-icon" id="find-prev" aria-label="Previous" data-icon="chevron-up"></button>
+        <button class="clickable-icon" id="find-next" aria-label="Next" data-icon="chevron-down"></button>
+        <button class="clickable-icon" id="find-close" aria-label="Close" data-icon="x"></button>
+      </div>
+      <div class="views" id="views"></div>
+    </main>
+  </div>
+
+  <div class="hover-url hidden" id="hover-url"></div>
+  <div class="status-bar" id="status-bar"></div>
+  <div class="notice-container" id="notices"></div>
+  <div id="layer"></div>
+
+  <script src="icons.js"></script>
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="link-token" content="__LINK_TOKEN__">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>New tab</title>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body class="theme-dark">
+  <main>
+    <div class="brand">
+      <img src="icon.png" width="36" height="36" alt="">
+      <h1>Link</h1>
+    </div>
+    <form id="search" autocomplete="off">
+      <button type="button" id="engine-btn" aria-label="Choose search engine" aria-haspopup="listbox"></button>
+      <input id="q" placeholder="Search the web" spellcheck="false">
+      <ul id="engine-list" role="listbox" hidden></ul>
+    </form>
+    <section id="sites"></section>
+    <footer id="stats"></footer>
+  </main>
+  <script src="newtab.js"></script>
+</body>
+</html>

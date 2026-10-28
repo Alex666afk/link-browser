@@ -1,0 +1,56 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
+const on = (channel) => (fn) => ipcRenderer.on(channel, (e, ...args) => fn(...args));
+
+contextBridge.exposeInMainWorld('link', {
+  getState: invoke('state:get'),
+  setSettings: invoke('settings:set'),
+  getEngines: invoke('engines:get'),
+  bookmarks: {
+    add: invoke('bookmarks:add'),
+    update: invoke('bookmarks:update'),
+    remove: invoke('bookmarks:remove'),
+    move: invoke('bookmarks:move'),
+  },
+  history: { search: invoke('history:search'), remove: invoke('history:remove'), clear: invoke('history:clear') },
+  suggest: invoke('suggest'),
+  upgradeUrl: invoke('upgrade-url'),
+  blockedFor: invoke('blocked:get'),
+  saveSession: invoke('session:save'),
+  importer: { detect: invoke('import:detect'), run: invoke('import:run'), file: invoke('import:file') },
+  extensions: {
+    list: invoke('ext:list'),
+    install: invoke('ext:install'),
+    loadUnpacked: invoke('ext:unpacked'),
+    remove: invoke('ext:remove'),
+    toggle: invoke('ext:toggle'),
+    open: invoke('ext:open'),
+  },
+  passwords: {
+    list: invoke('pw:list'),
+    reveal: invoke('pw:reveal'),
+    remove: invoke('pw:remove'),
+    add: invoke('pw:add'),
+    forOrigin: invoke('pw:for'),
+    fill: invoke('pw:fill'),
+  },
+  vpnCheck: invoke('vpn:check'),
+  clearData: invoke('data:clear'),
+  downloads: { open: invoke('download:open'), show: invoke('download:show'), cancel: invoke('download:cancel') },
+  savePage: invoke('page:save'),
+  makeDefaultBrowser: invoke('app:default-browser'),
+  on: {
+    shortcut: on('shortcut'),
+    openTab: on('open-tab'),
+    blocked: on('blocked'),
+    download: on('download'),
+    settings: on('settings'),
+    bookmarks: on('bookmarks'),
+    fullscreen: on('fullscreen'),
+    vpnStatus: on('vpn-status'),
+    notice: on('notice'),
+    guestMousedown: on('guest-mousedown'),
+    vpnBlocked: on('vpn-blocked'),
+  },
+});

@@ -1,0 +1,91 @@
+{
+  "name": "link-browser",
+  "productName": "Link",
+  "version": "1.0.0",
+  "description": "Link — a private, extensible web browser with an Obsidian-style interface",
+  "author": "Link",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable",
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:mac": "electron-builder --mac dmg zip --x64 --arm64"
+  },
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@ghostery/adblocker-electron": "^2.20.3",
+    "adm-zip": "^0.6.1",
+    "sql.js": "^1.15.2"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "app.link.browser",
+    "productName": "Link",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/*.wasm"
+    ],
+    "win": {
+      "icon": "assets/icon-1024.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Link",
+      "artifactName": "Link-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Link-Portable-${version}.${ext}"
+    },
+    "protocols": [
+      {
+        "name": "Web page",
+        "schemes": [
+          "http",
+          "https"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "assets/icon-1024.png",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "Link-${version}-mac-${arch}.${ext}",
+      "darkModeSupport": true,
+      "extendInfo": {
+        "NSCameraUsageDescription": "Websites you allow can use your camera.",
+        "NSMicrophoneUsageDescription": "Websites you allow can use your microphone.",
+        "NSLocationUsageDescription": "Websites you allow can see your location."
+      },
+      "identity": "-",
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "Link ${version}"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alex666afk/link-browser.git"
+  }
+}
