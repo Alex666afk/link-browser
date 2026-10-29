@@ -2,6 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { app } = require('electron');
 const initSqlJs = require('sql.js');
 const store = require('./store');
@@ -156,6 +157,103 @@ function chromiumExtensionDirs(profile) {
     });
 }
 
+// ---------- cookies ----------
+// On Windows, each cookie value is encrypted. Older Chromium cookies (and Firefox's, which aren't
+// encrypted at all) can be read under your own account. Current Chrome/Edge/Brave wrap cookies in
+// App-Bound Encryption, added to keep other programs out, which Link does not try to defeat.
+const { execFileSync } = require('child_process');
+
+// Unwraps one DPAPI blob (the browser's AES key) under the current Windows user. The blob goes
+// through an environment variable so no base64 ends up on the command line to be mis-parsed.
+function dpapiUnprotect(blob) {
+  if (process.platform !== 'win32') throw new Error('unsupported');
+  const script = 'Add-Type -AssemblyName System.Security;'
+    + '$b=[Convert]::FromBase64String($env:LINK_DPAPI_IN);'
+    + '[Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Unprotect($b,$null,0))';
+  const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    windowsHide: true,
+    env: { ...process.env, LINK_DPAPI_IN: blob.toString('base64') },
+  });
+  return Buffer.from(out.toString().trim(), 'base64');
+}
+
+// "Local State" lives in the User Data folder, which is the profile folder itself for single-profile
+// browsers (Opera) or its parent otherwise.
+function localStatePath(profile) {
+  return [path.join(profile, 'Local State'), path.join(path.dirname(profile), 'Local State')].find((f) => fs.existsSync(f)) || null;
+}
+
+// The AES key used for the profile's cookies, or null if Link can't read them (App-Bound only).
+function chromiumCookieKey(profile) {
+  try {
+    const file = localStatePath(profile);
+    if (!file) return null;
+    const osc = JSON.parse(fs.readFileSync(file, 'utf8')).os_crypt;
+    if (!osc?.encrypted_key) return null;
+    const raw = Buffer.from(osc.encrypted_key, 'base64');
+    if (raw.toString('latin1', 0, 5) !== 'DPAPI') return null;
+    return dpapiUnprotect(raw.subarray(5));
+  } catch { return null; }
+}
+
+function cookiesFile(profile) {
+  return [path.join(profile, 'Network', 'Cookies'), path.join(profile, 'Cookies')].find((f) => fs.existsSync(f)) || null;
+}
+
+async function chromiumCookies(profile) {
+  const file = cookiesFile(profile);
+  if (!file) return { cookies: [], appBound: 0 };
+  const key = process.platform === 'win32' ? chromiumCookieKey(profile) : null; // mac/linux use their own schemes
+  const db = await openDb(file);
+  const list = rows(db, 'SELECT host_key, name, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite FROM cookies');
+  db.close();
+  // Chromium samesite: -1 unspecified, 0 none, 1 lax, 2 strict.
+  const ss = { '-1': 'unspecified', 0: 'no_restriction', 1: 'lax', 2: 'strict' };
+
+  const cookies = [];
+  let appBound = 0;
+  for (const r of list) {
+    const enc = r.encrypted_value;
+    if (!enc || !enc.length) continue;
+    const prefix = Buffer.from(enc.subarray(0, 3)).toString('latin1');
+    let value = null;
+    if (prefix === 'v20') { appBound++; continue; } // App-Bound: left alone on purpose
+    if (prefix === 'v10' && key) {
+      try {
+        const nonce = Buffer.from(enc.subarray(3, 15));
+        const tag = Buffer.from(enc.subarray(enc.length - 16));
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, nonce);
+        decipher.setAuthTag(tag);
+        value = Buffer.concat([decipher.update(Buffer.from(enc.subarray(15, enc.length - 16))), decipher.final()]).toString('utf8');
+      } catch { continue; }
+    } else if (process.platform === 'win32' && prefix !== 'v10') {
+      continue; // some other scheme Link doesn't read
+    } else continue;
+    if (value == null) continue;
+    cookies.push({
+      domain: r.host_key, name: r.name, value, path: r.path || '/',
+      secure: !!r.is_secure, httpOnly: !!r.is_httponly, sameSite: ss[r.samesite] || 'unspecified',
+      expires: r.expires_utc ? (Number(r.expires_utc) / 1e6 - 11644473600) : 0,
+    });
+  }
+  return { cookies, appBound };
+}
+
+async function firefoxCookies(profile) {
+  const file = path.join(profile, 'cookies.sqlite');
+  if (!fs.existsSync(file)) return [];
+  const db = await openDb(file);
+  const list = rows(db, 'SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies');
+  db.close();
+  // Firefox sameSite: 0 none, 1 lax, 2 strict.
+  const ss = { 0: 'no_restriction', 1: 'lax', 2: 'strict' };
+  return list.map((r) => ({
+    domain: r.host, name: r.name, value: r.value, path: r.path || '/',
+    secure: !!r.isSecure, httpOnly: !!r.isHttpOnly, sameSite: ss[r.sameSite] || 'unspecified',
+    expires: Number(r.expiry) || 0,
+  }));
+}
+
 // ---------- firefox ----------
 async function firefoxData(profile) {
   const db = await openDb(path.join(profile, 'places.sqlite'));
@@ -258,17 +356,31 @@ function safariCookies() {
   return cookies;
 }
 
+// Normalises a cookie's SameSite to what Electron expects. Getting this right matters: auth cookies
+// are usually SameSite=None, and if they're imported as Lax they won't be sent on the cross-site
+// requests sites use to check you're signed in — so you'd look logged out despite having the cookie.
+function normalizeSameSite(v) {
+  const s = String(v ?? '').toLowerCase().replace(/[-_\s]/g, '');
+  if (s === 'none' || s === 'norestriction') return 'no_restriction';
+  if (s === 'lax') return 'lax';
+  if (s === 'strict') return 'strict';
+  return 'unspecified';
+}
+
 async function importCookies(ses, cookies) {
   const now = Date.now() / 1000;
   let n = 0;
   await Promise.all(cookies.filter((c) => c.expires > now && c.domain && c.name).map(async (c) => {
     const host = c.domain.replace(/^\./, '');
+    // SameSite=None is only valid on a Secure cookie; keep such a cookie cross-site by making it secure.
+    let sameSite = normalizeSameSite(c.sameSite);
+    const secure = c.secure || sameSite === 'no_restriction';
     try {
       await ses.cookies.set({
-        url: `http${c.secure ? 's' : ''}://${host}${c.path || '/'}`,
+        url: `http${secure ? 's' : ''}://${host}${c.path || '/'}`,
         name: c.name, value: c.value, path: c.path || '/',
         ...(c.domain.startsWith('.') ? { domain: c.domain } : {}), // otherwise it belongs to that host only
-        secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expires,
+        secure, httpOnly: c.httpOnly, sameSite, expirationDate: c.expires,
       });
       n++;
     } catch {}
@@ -309,6 +421,7 @@ async function run({ kind, name, profile, path: profilePath }, types, ses) {
         result.bookmarks = countUrls(data.bookmarks);
       }
       if (types.includes('history')) { store.mergeHistory(data.history); result.history = data.history.length; }
+      if (types.includes('cookies')) { result.cookies = await importCookies(ses, await firefoxCookies(profilePath)); }
     } else {
       if (types.includes('bookmarks')) {
         const marks = chromiumBookmarks(profilePath);
@@ -321,6 +434,14 @@ async function run({ kind, name, profile, path: profilePath }, types, ses) {
         const hist = await chromiumHistory(profilePath);
         store.mergeHistory(hist);
         result.history = hist.length;
+      }
+      if (types.includes('cookies')) {
+        const { cookies, appBound } = await chromiumCookies(profilePath);
+        result.cookies = await importCookies(ses, cookies);
+        if (appBound) {
+          result.appBoundCookies = appBound;
+          result.errors.push(`${name} protects ${appBound.toLocaleString()} cookies with App-Bound Encryption, so Link can’t read them. Bookmarks, history and any older cookies still came over.`);
+        }
       }
     }
   } catch (err) {
@@ -382,4 +503,78 @@ function importPasswordsCsv(file) {
   return { passwords: passwords.importCsv(fs.readFileSync(file, 'utf8')) };
 }
 
-module.exports = { detect, run, importBookmarksHtml, importPasswordsCsv };
+// Expiry can arrive as seconds or milliseconds; normalise to seconds.
+function toSeconds(v) {
+  const n = Number(v);
+  if (!n || !isFinite(n)) return 0;
+  return n > 1e12 ? Math.round(n / 1000) : Math.round(n);
+}
+
+// Pulls a cookie array out of whatever JSON shape a cookie exporter produced (a bare array, or an
+// object keyed by site, or wrapped under cookies/data/…).
+function cookieArrayFromJson(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    for (const key of ['cookies', 'data', 'result', 'results']) {
+      if (Array.isArray(data[key])) return data[key];
+    }
+    // An object whose values are per-site cookie arrays, or one cookie object itself.
+    const arrays = Object.values(data).filter(Array.isArray);
+    if (arrays.length) return arrays.flat();
+    if (data.name && (data.domain || data.host)) return [data];
+  }
+  return [];
+}
+
+// A cookies file the user exported from their own browser with a cookie-exporter extension.
+// Accepts the Netscape "cookies.txt" format and the JSON these extensions produce.
+function parseCookiesFile(text) {
+  const trimmed = text.replace(/^﻿/, '').trim();
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    return cookieArrayFromJson(JSON.parse(trimmed)).map((c) => ({
+      domain: c.domain || c.host || c.hostKey || c.Host || c.Domain || '',
+      name: c.name || c.Name || '',
+      value: c.value ?? c.Value ?? '',
+      path: c.path || c.Path || '/',
+      secure: !!(c.secure ?? c.Secure ?? c.isSecure),
+      httpOnly: !!(c.httpOnly ?? c.httponly ?? c.HttpOnly ?? c.isHttpOnly),
+      sameSite: c.sameSite ?? c.samesite ?? c.sameSiteStatus,
+      expires: toSeconds(c.expirationDate ?? c.expires ?? c.expiry ?? c.expires_utc ?? c.Expires),
+    })).filter((c) => c.domain && c.name);
+  }
+  // Netscape cookies.txt: domain, includeSubdomains, path, secure, expiry, name, value — tab-separated,
+  // though some exporters use spaces. A "#HttpOnly_" prefix marks an HTTP-only cookie; other "#" lines
+  // are comments.
+  const cookies = [];
+  for (let line of text.split(/\r?\n/)) {
+    let httpOnly = false;
+    if (line.startsWith('#HttpOnly_')) { httpOnly = true; line = line.slice(10); }
+    else if (line.startsWith('#') || !line.trim()) continue;
+    let f = line.split('\t');
+    if (f.length < 7) f = line.trim().split(/\s+/); // fall back to whitespace
+    if (f.length < 7) continue;
+    const secure = f[3].toUpperCase() === 'TRUE';
+    cookies.push({
+      domain: f[0], httpOnly, secure,
+      path: f[2] || '/',
+      // cookies.txt carries no SameSite; a secure cookie was most likely sent cross-site, so keep it so.
+      sameSite: secure ? 'none' : 'unspecified',
+      expires: toSeconds(f[4]),
+      name: f[5], value: f.slice(6).join('\t'),
+    });
+  }
+  return cookies.filter((c) => c.domain && c.name);
+}
+
+async function importCookiesFile(file, ses) {
+  const raw = fs.readFileSync(file, 'utf8');
+  let cookies;
+  try { cookies = parseCookiesFile(raw); }
+  catch (err) { throw new Error(`That file isn’t a cookies.txt or cookie JSON Link understands (${err.message}).`); }
+  const now = Date.now() / 1000;
+  const persistent = cookies.filter((c) => c.expires > now);
+  const imported = await importCookies(ses, cookies);
+  return { cookies: imported, total: cookies.length, sessionOnly: cookies.length - persistent.length };
+}
+
+module.exports = { detect, run, importBookmarksHtml, importPasswordsCsv, importCookiesFile };

@@ -376,7 +376,8 @@ const PANES = {
     const box = h('div', { class: 'card-list' });
     if (!sources.length) box.append(h('div', { class: 'empty-state' }, 'No other browsers found. You can still import files below.'));
     for (const src of sources) box.append(importCard(src));
-    el.append(box,
+    el.append(...[
+      box,
       state.platform === 'darwin' ? settingItem('Safari tabs', 'Open every tab you have open in Safari here. Safari needs to be open; macOS asks you to allow this the first time.', btn('Bring over tabs', bringSafariTabs, 'mod-cta')) : null,
       settingHeading('Import from a file'),
       settingItem('Bookmarks HTML file', 'Every browser can export bookmarks as an HTML file — Safari, Firefox, Chrome, Edge, Opera and more.', btn('Choose file…', async () => {
@@ -392,7 +393,18 @@ const PANES = {
             if (r) notice(`Imported ${r.passwords} passwords`, { type: 'success' });
           } catch (err) { notice(cleanError(err), { type: 'error', timeout: 8000 }); }
         })),
-    );
+      settingItem('Cookies file', h('span', {}, 'Stay signed in to sites whose cookies a browser won’t hand over (like Chrome’s). Export them in that browser with a trusted, open-source cookie extension (e.g. ', h('b', {}, 'Get cookies.txt LOCALLY'), ' or ', h('b', {}, 'Cookie-Editor'), ') as a ', h('b', {}, 'cookies.txt'), ' or JSON file. Treat that file like a password list and delete it after importing.'),
+        btn('Choose file…', async () => {
+          try {
+            const r = await L.importer.file('cookies');
+            if (!r) return; // cancelled
+            if (r.cookies) notice(`Signed in to the sites from ${r.cookies} cookies.`, { type: 'success' });
+            else if (r.total && r.sessionOnly === r.total) notice(`That file’s ${r.total} cookies are all session-only (no expiry), which can’t be saved. Sign in to those sites instead.`, { type: 'error', timeout: 9000 });
+            else if (r.total) notice(`Found ${r.total} cookies but couldn’t save any — they may be expired.`, { type: 'error', timeout: 9000 });
+            else notice('No cookies were found in that file. Make sure it’s the exported cookies.txt or JSON.', { type: 'error', timeout: 9000 });
+          } catch (err) { notice(cleanError(err), { type: 'error', timeout: 9000 }); }
+        })),
+    ].filter(Boolean));
   },
 
   // ----------------------------------------------------------
@@ -409,7 +421,9 @@ const PANES = {
 };
 
 function importCard(src, compact = false) {
-  const types = src.kind === 'safari' ? { bookmarks: true, history: true, cookies: true } : { bookmarks: true, history: true, extensions: src.kind === 'chromium' };
+  const types = src.kind === 'safari'
+    ? { bookmarks: true, history: true, cookies: true }
+    : { bookmarks: true, history: true, cookies: true, extensions: src.kind === 'chromium' };
   const result = h('div');
   const button = btn('Import', async () => {
     const chosen = Object.keys(types).filter((k) => types[k]);
@@ -423,11 +437,12 @@ function importCard(src, compact = false) {
       if (chosen.includes('history')) parts.push(`${r.history.toLocaleString()} history entries`);
       if (chosen.includes('extensions')) parts.push(`${r.extensions} extensions`);
       if (chosen.includes('cookies')) parts.push(`${r.cookies.toLocaleString()} cookies (you stay signed in to those sites)`);
-      result.replaceChildren(
+      result.replaceChildren(...[
         h('div', { class: 'result-line' }, '✓ Imported ' + parts.join(', ')),
         ...r.errors.map((e) => h('div', { class: 'result-line is-error' }, e)),
         r.needsFullDiskAccess ? h('div', { class: 'result-line' }, btn('Open Full Disk Access settings', () => L.importer.fullDiskAccess())) : null,
-        r.extensionErrors.length ? h('div', { class: 'result-line is-error' }, `${r.extensionErrors.length} extension(s) could not be loaded.`) : null);
+        r.extensionErrors.length ? h('div', { class: 'result-line is-error' }, `${r.extensionErrors.length} extension(s) could not be loaded.`) : null,
+      ].filter(Boolean));
       button.textContent = 'Import again';
     } catch (err) {
       result.replaceChildren(h('div', { class: 'result-line is-error' }, cleanError(err)));

@@ -513,11 +513,15 @@ function registerIpc() {
     return r;
   });
   h('import:file', async (kind) => {
-    const filters = kind === 'passwords' ? [{ name: 'Passwords CSV', extensions: ['csv'] }] : [{ name: 'Bookmarks HTML', extensions: ['html', 'htm'] }];
+    const filters = kind === 'passwords' ? [{ name: 'Passwords CSV', extensions: ['csv'] }]
+      : kind === 'cookies' ? [{ name: 'Cookies file', extensions: ['txt', 'json'] }, { name: 'All files', extensions: ['*'] }]
+      : [{ name: 'Bookmarks HTML', extensions: ['html', 'htm'] }];
     const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
     if (canceled || !filePaths[0]) return null;
-    const r = kind === 'passwords' ? importer.importPasswordsCsv(filePaths[0]) : importer.importBookmarksHtml(filePaths[0]);
-    broadcastBookmarks();
+    const r = kind === 'passwords' ? importer.importPasswordsCsv(filePaths[0])
+      : kind === 'cookies' ? await importer.importCookiesFile(filePaths[0], mainSes)
+      : importer.importBookmarksHtml(filePaths[0]);
+    if (kind === 'bookmarks') broadcastBookmarks();
     return r;
   });
 
