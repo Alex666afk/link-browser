@@ -169,6 +169,31 @@ function searchQueryOf(url) {
   } catch { return ''; }
 }
 
+let misplacedQuietUntil = 0; // the "Google places you in Iran" notice shows at most once in a while
+
+async function clearGoogleCookies(ses) {
+  const cookies = (await ses.cookies.get({})).filter((c) => /(^|\.)google\.[a-z.]+$/.test(c.domain.replace(/^\./, '')));
+  await Promise.all(cookies.map((c) => ses.cookies.remove(`http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`, c.name)));
+}
+
+// Developer tools open in their own window: docked into a tab they cover the page and can't be
+// closed. F12 in that window closes it again.
+function openDevTools(contents) {
+  if (contents.isDevToolsOpened()) return;
+  contents.once('devtools-opened', () => {
+    contents.devToolsWebContents?.on('before-input-event', (e, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12') { e.preventDefault(); contents.closeDevTools(); }
+    });
+  });
+  contents.openDevTools({ mode: 'detach', title: `Developer tools — ${contents.getTitle() || contents.getURL()}` });
+}
+function toggleDevTools(id) {
+  const contents = require('electron').webContents.fromId(id);
+  if (!contents) return;
+  if (contents.isDevToolsOpened()) contents.closeDevTools();
+  else openDevTools(contents);
+}
+
 // ---------- page (webview guest) wiring ----------
 function setupGuest(contents) {
   protection.attachToGuest(contents);
@@ -187,13 +212,36 @@ function setupGuest(contents) {
 
   // Some search engines answer VPN traffic with a robot check. Tell the shell, which offers to
   // open that site without the VPN (or to use Link Search) — it never switches engines by itself.
+  // With the built-in VPN, Link also moves to another Tor exit in the background (sites block
+  // some exits, and Google places many others in Iran), so trying again usually works. It never
+  // reloads the page itself: that's up to you. One switch per search (site + query), since sites
+  // keep adding junk to the address.
+  let switchedFor = '';
+  const searchKey = (url) => `${hostKey(url)}|${searchQueryOf(url)}`;
+  const switchExitQuietly = async (url) => {
+    const key = searchKey(url);
+    if (!protection.canSwitchExit() || switchedFor === key) return;
+    switchedFor = key;
+    try {
+      await protection.switchExit();
+      // Google can carry a robot check or a wrong location over to the new exit through its
+      // cookies, so it starts fresh (this signs you out of Google).
+      if (/(^|\.)google\.[a-z.]+$/.test(hostKey(url))) await clearGoogleCookies(contents.session);
+    } catch {}
+  };
+
   let lastBlocked = { host: '', at: 0 };
-  const reportBlocked = (name, retryUrl) => {
+  const reportBlocked = async (name, retryUrl, partial = false) => {
     const host = hostKey(retryUrl);
-    if (!store.getSettings().vpn.enabled || (store.getSettings().vpn.bypass || []).includes(host)) return;
+    const vpn = store.getSettings().vpn;
+    if (!vpn.enabled || (vpn.bypass || []).includes(host)) return;
+    // Other sites that block the VPN can be opened without it straight away (the shell does that
+    // and offers to undo). Never search engines: they would see where you really are.
+    const auto = vpn.autoBypass && !searchEngineFor(retryUrl);
+    if (!auto) switchExitQuietly(retryUrl);
     if (lastBlocked.host === host && Date.now() - lastBlocked.at < 30000) return; // one notice per block
     lastBlocked = { host, at: Date.now() };
-    send('vpn-blocked', { id: contents.id, name, host, retryUrl, query: searchQueryOf(retryUrl) });
+    send('vpn-blocked', { id: contents.id, name, host, retryUrl, query: searchQueryOf(retryUrl), partial, auto });
   };
   const ROBOT_CHECK = /captcha|not a robot|unusual traffic|verify you are human|verification required|just a moment\.\.\.|are you a robot|attention required/;
   const GOOGLE_SORRY = /^https:\/\/(www\.)?google\.[a-z.]+\/sorry\//;
@@ -202,7 +250,7 @@ function setupGuest(contents) {
     try {
       const u = new URL(url);
       if (GOOGLE_SORRY.test(url)) return u.searchParams.get('continue') || url;
-      for (const k of [...u.searchParams.keys()]) if (k.startsWith('__cf')) u.searchParams.delete(k);
+      for (const k of [...u.searchParams.keys()]) if (k.startsWith('__cf') || k === 'sei') u.searchParams.delete(k);
       return u.toString();
     } catch { return url; }
   };
@@ -217,9 +265,48 @@ function setupGuest(contents) {
       contents.executeJavaScript('(document.title + " " + (document.body ? document.body.innerText.slice(0, 3000) : "")).toLowerCase()'),
       new Promise((r) => setTimeout(() => r(''), 3000)),
     ]).catch(() => '');
-    if (ROBOT_CHECK.test(text)) reportBlocked(engine.name, cleanRetryUrl(url));
+    if (ROBOT_CHECK.test(text)) return reportBlocked(engine.name, cleanRetryUrl(url));
+    if (titleOnly) return;
+    const place = engine.id === 'google' ? await googlePlacesInIran() : '';
+    if (!place) return;
+    switchExitQuietly(cleanRetryUrl(url));
+    if (Date.now() < misplacedQuietUntil) return; // said so recently
+    misplacedQuietUntil = Date.now() + 10 * 60000;
+    send('vpn-misplaced', { id: contents.id, name: engine.name, place, country: protection.getVpnLocation()?.country, query: searchQueryOf(url), retryUrl: cleanRetryUrl(url) });
   };
-  contents.on('did-finish-load', () => checkForRobotCheck(false));
+  // Google places many Tor exits in Iran. Its location footer is the line just before its
+  // "∙ Update location" link, in any language. Returns that place when it's in Iran.
+  const IRAN = /iran|irán|tehran|teher|téhéran|ایران|تهران|alborz|ardabil|azarbaijan|bushehr|chaharmahal|fars province|gilan|guilán|golestan|hamadan|hormozgan|ilam province|isfahan|esfahan|ispahán|kerman|khorasan|jorasán|khuzestan|juzestán|kohgiluyeh|kordestan|lorestan|markazi|mazandaran|mazandarán|qazvin|qom|semnan|sistan|yazd|zanjan/i;
+  const googlePlacesInIran = async () => {
+    if (protection.getVpnLocation()?.countryCode === 'IR') return '';
+    const place = await contents.executeJavaScript(
+      '(() => { const m = [...document.body.innerText.matchAll(/^(.+)\\n\\s*∙/gm)]; return m.length ? m[m.length - 1][1] : ""; })()',
+    ).catch(() => '');
+    return IRAN.test(place) ? place : '';
+  };
+  // Any other site: firewalls like Cloudflare's either keep a VPN visitor on their check page or
+  // let the page through and then refuse its own styles and scripts, so it looks broken. Checks
+  // never run at once: challenge pages often pass by themselves within a few seconds.
+  const SITE_CHECK_DELAY = 12000;
+  const checkSiteBlocks = (url) => setTimeout(async () => {
+    if (contents.isDestroyed() || contents.getURL() !== url || !store.getSettings().vpn.enabled) return;
+    const host = hostKey(url);
+    const found = await contents.executeJavaScript(`(() => {
+      const title = document.title.toLowerCase();
+      const own = performance.getEntriesByType('resource').filter((e) => {
+        try { const h = new URL(e.name).hostname; return h === ${JSON.stringify(host)} || h.endsWith('.' + ${JSON.stringify(host)}); } catch { return false; }
+      });
+      return { title, refused: own.filter((e) => [403, 429, 503].includes(e.responseStatus)).length };
+    })()`).catch(() => null);
+    if (!found) return;
+    if (ROBOT_CHECK.test(found.title)) reportBlocked(host, cleanRetryUrl(url));
+    else if (found.refused >= 3) reportBlocked(host, cleanRetryUrl(url), true);
+  }, SITE_CHECK_DELAY);
+  contents.on('did-finish-load', () => {
+    checkForRobotCheck(false);
+    const url = contents.getURL();
+    if (/^https?:/.test(url) && !(searchEngineFor(url) && searchQueryOf(url))) checkSiteBlocks(url);
+  });
   contents.on('page-title-updated', () => checkForRobotCheck(true));
 
   // Panels and suggestions close when you click into the page.
@@ -280,7 +367,7 @@ function setupGuest(contents) {
         { type: 'separator' },
       );
     }
-    items.push({ label: 'Inspect', click: () => contents.inspectElement(p.x, p.y) });
+    items.push({ label: 'Inspect', click: () => { openDevTools(contents); contents.inspectElement(p.x, p.y); } });
     Menu.buildFromTemplate(items).popup({ window: win });
   });
 }
@@ -328,8 +415,27 @@ async function suggest(query) {
   return { local, remote };
 }
 
+// ---------- browser icons (for the importer) ----------
+// On macOS, app.getFileIcon() on an .app bundle crashes the whole app (seen on Apple Silicon /
+// macOS 26), so read the bundle's .icns and convert it with the system's `sips` in a child process.
+async function browserIcon(exe) {
+  if (process.platform !== 'darwin') return (await app.getFileIcon(exe, { size: 'large' })).toDataURL();
+  const { execFile } = require('child_process');
+  const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { timeout: 5000 }, (err, out) => (err ? reject(err) : resolve(out))));
+  const name = (await run('plutil', ['-extract', 'CFBundleIconFile', 'raw', path.join(exe, 'Contents', 'Info.plist')])).trim();
+  if (!name) return undefined;
+  const icns = path.join(exe, 'Contents', 'Resources', name.endsWith('.icns') ? name : name + '.icns');
+  const png = path.join(app.getPath('temp'), `link-icon-${store.uid()}.png`);
+  try {
+    await run('sips', ['-s', 'format', 'png', '-Z', '64', icns, '--out', png]);
+    return 'data:image/png;base64,' + fs.readFileSync(png).toString('base64');
+  } finally {
+    fs.rmSync(png, { force: true });
+  }
+}
+
 // ---------- IPC ----------
-function broadcastBookmarks() { send('bookmarks', store.getBookmarks()); }
+function broadcastBookmarks(){ send('bookmarks', store.getBookmarks()); }
 
 function registerIpc() {
   const h = (ch, fn) => ipcMain.handle(ch, (e, ...args) => fn(...args));
@@ -382,12 +488,27 @@ function registerIpc() {
     const exe = src.exe;
     delete src.exe;
     if (exe) {
-      try { src.icon = (await app.getFileIcon(exe, { size: 'large' })).toDataURL(); } catch {}
+      try { src.icon = await browserIcon(exe); } catch {}
     }
     return src;
   })));
+  // The tabs open in Safari right now (Safari keeps them away from other apps' file access, so
+  // Link asks Safari itself; macOS asks you to allow this the first time). null = Safari isn't open.
+  h('import:safariTabs', async () => {
+    if (process.platform !== 'darwin') return null;
+    const script = `const s = Application('Safari');
+      if (!s.running()) JSON.stringify(null);
+      else JSON.stringify(s.windows().flatMap((w) => { try { return w.tabs().map((t) => ({ url: t.url(), title: t.name() })); } catch (e) { return []; } }));`;
+    const out = await new Promise((resolve, reject) => require('child_process').execFile('osascript', ['-l', 'JavaScript', '-e', script], { timeout: 60000 }, (err, stdout, stderr) => {
+      if (!err) return resolve(stdout);
+      reject(new Error(/-1743|not allowed|Not authorized/i.test(stderr) ? 'Link isn’t allowed to read Safari’s tabs. Turn on Safari for Link in System Settings → Privacy & Security → Automation.' : 'Could not read Safari’s tabs.'));
+    }));
+    const tabs = JSON.parse(out);
+    return tabs && tabs.filter((t) => /^https?:/.test(t.url || ''));
+  });
+  h('import:fullDiskAccess', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'));
   h('import:run', async (source, types) => {
-    const r = await importer.run(source, types);
+    const r = await importer.run(source, types, mainSes);
     broadcastBookmarks();
     return r;
   });
@@ -414,13 +535,15 @@ function registerIpc() {
   h('pw:list', () => passwords.list());
   h('pw:reveal', (id) => passwords.reveal(id));
   h('pw:remove', (id) => passwords.remove(id));
+  h('devtools:toggle', (id) => toggleDevTools(id));
   h('pw:add', (entry) => passwords.add(entry));
   h('pw:for', (origin) => passwords.forOrigin(origin));
   h('pw:fill', async (webContentsId, id) => {
     const { webContents } = require('electron');
     const guest = webContents.fromId(webContentsId);
     const entry = passwords.list().find((p) => p.id === id);
-    if (!guest || !entry) return false;
+    // A password only ever goes into the site it was saved for.
+    if (!guest || !entry || !passwords.sameSite(entry.url, guest.getURL())) return false;
     const user = JSON.stringify(entry.username);
     const pass = JSON.stringify(passwords.reveal(id));
     return guest.executeJavaScript(`(() => {
@@ -501,10 +624,30 @@ app.on('will-attach-webview', (e, prefs, params) => {
   if (![PERSIST_PARTITION, PRIVATE_PARTITION].includes(params.partition)) e.preventDefault();
 });
 
+// Link encrypts cookies on disk with a key kept in the Keychain. Cookies saved before that (or
+// brought over from another browser) are stored again once so they're encrypted too.
+async function encryptOldCookies(ses) {
+  const marker = path.join(app.getPath('userData'), 'cookies-encrypted');
+  if (fs.existsSync(marker)) return;
+  const now = Date.now() / 1000;
+  for (const c of await ses.cookies.get({})) {
+    if (c.session || !c.expirationDate || c.expirationDate < now) continue;
+    const host = c.domain.replace(/^\./, '');
+    await ses.cookies.set({
+      url: `http${c.secure ? 's' : ''}://${host}${c.path}`, name: c.name, value: c.value, path: c.path,
+      ...(c.hostOnly ? {} : { domain: c.domain }),
+      secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expirationDate, sameSite: c.sameSite,
+    }).catch(() => {});
+  }
+  await ses.cookies.flushStore();
+  fs.writeFileSync(marker, '');
+}
+
 app.whenReady().then(async () => {
   store.load();
   mainSes = session.fromPartition(PERSIST_PARTITION);
   privateSes = session.fromPartition(PRIVATE_PARTITION);
+  encryptOldCookies(mainSes).catch((err) => console.error('[cookies]', err));
 
   // Present as plain Chrome so sites don't treat Link as an unknown browser.
   const ua = mainSes.getUserAgent().replace(/\s(link-browser|Link)\/\S+/gi, '').replace(/\sElectron\/\S+/, '');

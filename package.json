@@ -19,7 +19,7 @@
     "sql.js": "^1.15.2"
   },
   "devDependencies": {
-    "electron": "^45.1.0",
+    "electron": "42.11.18",
     "electron-builder": "^26.18.0"
   },
   "build": {
@@ -33,6 +33,14 @@
       "assets/**/*",
       "package.json"
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
     "asarUnpack": [
       "node_modules/sql.js/dist/*.wasm"
     ],
@@ -75,7 +83,8 @@
       "extendInfo": {
         "NSCameraUsageDescription": "Websites you allow can use your camera.",
         "NSMicrophoneUsageDescription": "Websites you allow can use your microphone.",
-        "NSLocationUsageDescription": "Websites you allow can see your location."
+        "NSLocationUsageDescription": "Websites you allow can see your location.",
+        "NSAppleEventsUsageDescription": "Link reads the tabs open in Safari when you ask it to bring them over."
       },
       "identity": "-",
       "hardenedRuntime": false

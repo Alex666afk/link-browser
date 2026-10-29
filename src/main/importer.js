@@ -107,6 +107,7 @@ function detect() {
     for (const p of chromiumProfiles(b)) found.push({ browser: b.id, kind: 'chromium', name: b.name, profile: p.name, path: p.path, exe: findExe(b.id) });
   }
   for (const p of firefoxProfiles()) found.push({ browser: 'firefox', kind: 'firefox', name: 'Firefox', profile: p.name, path: p.path, exe: findExe('firefox') });
+  if (process.platform === 'darwin' && fs.existsSync(SAFARI)) found.push({ browser: 'safari', kind: 'safari', name: 'Safari', path: SAFARI, exe: '/Applications/Safari.app' });
   return found;
 }
 
@@ -182,11 +183,123 @@ async function firefoxData(profile) {
   return { history: hist, bookmarks: top };
 }
 
+// ---------- safari ----------
+// macOS keeps Safari's files private: Link can only read them with Full Disk Access.
+const SAFARI = path.join(home, 'Library', 'Safari');
+const SAFARI_COOKIES = path.join(home, 'Library', 'Containers', 'com.apple.Safari', 'Data', 'Library', 'Cookies', 'Cookies.binarycookies');
+const MAC_EPOCH = 978307200; // seconds from 1970 to 2001, where Apple's clock starts
+
+// Reads a property list (Safari's bookmarks are a binary one) by having plutil turn it into XML.
+function readPlist(file) {
+  const xml = require('child_process').execFileSync('plutil', ['-convert', 'xml1', '-o', '-', file], { maxBuffer: 256 * 1024 * 1024 }).toString('utf8');
+  const unescape = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  const tokens = xml.replace(/<\?xml[^>]*>|<!DOCTYPE[^>]*>|<\/?plist[^>]*>/g, '').match(/<(\w+)\/>|<(\w+)>([^<]*)<\/\2>|<\/?\w+>/g) || [];
+  let i = 0;
+  const value = () => {
+    const t = tokens[i++];
+    if (t === '<dict>') {
+      const obj = {};
+      while (tokens[i] !== '</dict>') { const key = unescape(/<key>([^<]*)<\/key>/.exec(tokens[i++])[1]); obj[key] = value(); }
+      i++;
+      return obj;
+    }
+    if (t === '<array>') { const arr = []; while (tokens[i] !== '</array>') arr.push(value()); i++; return arr; }
+    if (t === '<dict/>') return {};
+    if (t === '<array/>') return [];
+    if (t === '<true/>') return true;
+    if (t === '<false/>') return false;
+    const m = /<(\w+)>([^<]*)</.exec(t);
+    return m ? (m[1] === 'integer' || m[1] === 'real' ? Number(m[2]) : unescape(m[2])) : null;
+  };
+  return value();
+}
+
+function safariBookmarks() {
+  const root = readPlist(path.join(SAFARI, 'Bookmarks.plist'));
+  const convert = (n) => (n.WebBookmarkType === 'WebBookmarkTypeLeaf'
+    ? (/^https?:/.test(n.URLString || '') ? { type: 'url', title: n.URIDictionary?.title || n.URLString, url: n.URLString } : null)
+    : n.WebBookmarkType === 'WebBookmarkTypeList' ? { type: 'folder', title: n.Title || 'Folder', children: (n.Children || []).map(convert).filter(Boolean) } : null);
+  const names = { BookmarksBar: 'Favourites', BookmarksMenu: 'Bookmarks Menu', 'com.apple.ReadingList': 'Reading List' };
+  return (root.Children || []).map(convert).filter((f) => f && f.children?.length).map((f) => ({ ...f, title: names[f.title] || f.title }));
+}
+
+async function safariHistory() {
+  const db = await openDb(path.join(SAFARI, 'History.db'));
+  const list = rows(db, `SELECT i.url, i.visit_count, MAX(v.visit_time) AS last, (SELECT title FROM history_visits WHERE history_item = i.id AND title IS NOT NULL ORDER BY visit_time DESC LIMIT 1) AS title
+    FROM history_items i JOIN history_visits v ON v.history_item = i.id GROUP BY i.id ORDER BY last DESC LIMIT 20000`);
+  db.close();
+  return list.map((r) => ({ url: r.url, title: r.title || r.url, visits: r.visit_count, lastVisit: Math.round((r.last + MAC_EPOCH) * 1000) }));
+}
+
+// Safari's Cookies.binarycookies: "cook", a page count and page sizes (big-endian), then pages of
+// cookies (little-endian), each with its flags, expiry and offsets to its text fields.
+function safariCookies() {
+  const buf = fs.readFileSync(SAFARI_COOKIES);
+  if (buf.toString('latin1', 0, 4) !== 'cook') throw new Error('Safari’s cookie file is in an unknown format.');
+  const pages = buf.readUInt32BE(4);
+  const cookies = [];
+  let pos = 8 + pages * 4;
+  for (let p = 0; p < pages; p++) {
+    const size = buf.readUInt32BE(8 + p * 4);
+    const page = buf.subarray(pos, pos + size);
+    pos += size;
+    const count = page.readUInt32LE(4);
+    for (let c = 0; c < count; c++) {
+      const at = page.readUInt32LE(8 + c * 4);
+      const text = (off) => { const s = at + page.readUInt32LE(at + off); return page.toString('utf8', s, page.indexOf(0, s)); };
+      const flags = page.readUInt32LE(at + 8);
+      cookies.push({
+        domain: text(16), name: text(20), path: text(24), value: text(28),
+        secure: !!(flags & 1), httpOnly: !!(flags & 4),
+        expires: page.readDoubleLE(at + 40) + MAC_EPOCH,
+      });
+    }
+  }
+  return cookies;
+}
+
+async function importCookies(ses, cookies) {
+  const now = Date.now() / 1000;
+  let n = 0;
+  await Promise.all(cookies.filter((c) => c.expires > now && c.domain && c.name).map(async (c) => {
+    const host = c.domain.replace(/^\./, '');
+    try {
+      await ses.cookies.set({
+        url: `http${c.secure ? 's' : ''}://${host}${c.path || '/'}`,
+        name: c.name, value: c.value, path: c.path || '/',
+        ...(c.domain.startsWith('.') ? { domain: c.domain } : {}), // otherwise it belongs to that host only
+        secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expires,
+      });
+      n++;
+    } catch {}
+  }));
+  return n;
+}
+
 // ---------- main entry ----------
-async function run({ kind, name, profile, path: profilePath }, types) {
+async function run({ kind, name, profile, path: profilePath }, types, ses) {
   const label = `Imported from ${name}${profile && profile !== 'Default' ? ` (${profile})` : ''}`;
-  const result = { bookmarks: 0, history: 0, extensions: 0, extensionErrors: [], errors: [] };
+  const result = { bookmarks: 0, history: 0, cookies: 0, extensions: 0, extensionErrors: [], errors: [] };
   const countUrls = (nodes) => nodes.reduce((n, c) => n + (c.type === 'url' ? 1 : countUrls(c.children || [])), 0);
+
+  if (kind === 'safari') {
+    const step = async (type, fn) => {
+      if (!types.includes(type)) return;
+      try { await fn(); } catch (err) {
+        const blocked = err.code === 'EPERM' || err.code === 'EACCES' || /Operation not permitted|permission/i.test(String(err.stderr || err.message));
+        const msg = blocked ? 'macOS keeps Safari’s data private. Give Link Full Disk Access, then quit and reopen Link and import again.' : `${type}: ${err.message}`;
+        if (blocked) result.needsFullDiskAccess = true;
+        if (!result.errors.includes(msg)) result.errors.push(msg);
+      }
+    };
+    await step('bookmarks', () => {
+      const marks = safariBookmarks();
+      if (marks.length) { store.addBookmarkTree({ title: label, children: marks }); result.bookmarks = countUrls(marks); }
+    });
+    await step('history', async () => { const hist = await safariHistory(); store.mergeHistory(hist); result.history = hist.length; });
+    await step('cookies', async () => { result.cookies = await importCookies(ses, safariCookies()); });
+    return result;
+  }
 
   try {
     if (kind === 'firefox') {

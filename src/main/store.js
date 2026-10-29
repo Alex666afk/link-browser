@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   sidebarOpen: true,
   sidebarView: 'bookmarks',
   restoreTabs: true,
+  memorySaver: true,
   adblock: { enabled: true, level: 'adsAndTracking' },
   httpsOnly: true,
   gpc: true,
@@ -38,7 +39,7 @@ const DEFAULT_SETTINGS = {
   allowLocationPrompts: false,
   allowNotificationPrompts: false,
   clearOnExit: false,
-  vpn: { enabled: false, mode: 'tor', country: '', type: 'socks5', host: '', port: '', username: '', password: '', pac: '', bypass: [] },
+  vpn: { enabled: false, mode: 'tor', country: '', type: 'socks5', host: '', port: '', username: '', password: '', pac: '', bypass: [], autoBypass: true },
   extensions: [],
 };
 

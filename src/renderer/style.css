@@ -152,7 +152,8 @@ kbd {
 .sidebar-resize:hover::after, .sidebar-resize.is-dragging::after { background: var(--accent); }
 
 .sidebar-header { height: var(--header-height); flex-shrink: 0; display: flex; align-items: center; padding: 0 8px; border-bottom: 1px solid var(--background-modifier-border); }
-.sidebar-tabs { display: flex; gap: 2px; }
+.sidebar-tabs { display: flex; gap: 2px; flex: 1; }
+.sidebar-tabs .sidebar-close { margin-left: auto; }
 .sidebar-tabs .clickable-icon { padding: 6px 7px; }
 .sidebar-tabs .clickable-icon.is-active { background: var(--background-modifier-active); color: var(--text-normal); }
 .nav-header { display: flex; justify-content: center; gap: 2px; padding: 8px 8px 4px; flex-shrink: 0; }
@@ -172,9 +173,11 @@ kbd {
   border-bottom: 1px solid var(--background-modifier-border);
 }
 .platform-win32 .tab-strip, .platform-linux .tab-strip { padding-right: 148px; }
-.tabs { display: flex; align-items: flex-end; min-width: 0; height: 100%; flex: 0 1 auto; overflow: hidden; }
+.tabs { display: flex; align-items: flex-end; min-width: 0; height: 100%; flex: 0 1 auto; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+/* tabs shrink to a readable width, then the strip scrolls (wheel or trackpad) */
 .tab {
-  position: relative; height: 32px; flex: 0 1 220px; min-width: 44px;
+  position: relative; height: 32px; flex: 0 0 var(--tab-width, 220px); min-width: 0;
   display: flex; align-items: center; gap: 7px; padding: 0 8px 0 11px; margin-bottom: -1px;
   border-radius: var(--radius-m) var(--radius-m) 0 0; color: var(--text-muted); cursor: default; font-size: 13px;
   border: 1px solid transparent; border-bottom: 0; isolation: isolate;
@@ -206,7 +209,11 @@ kbd {
 .tab.is-private { font-style: italic; }
 .tab.is-dragging { opacity: 0.5; }
 .tab.is-audible .tab-audio { display: inline-flex; }
+.tab.is-asleep:not(.is-active) .tab-favicon, .tab.is-asleep:not(.is-active) .tab-title { opacity: 0.6; }
 .tab-audio { display: none; padding: 2px !important; }
+.tab.is-active { flex-basis: var(--active-tab-width, 220px); }
+.tabs.is-compact .tab:not(.is-active) { padding: 0; justify-content: center; }
+.tabs.is-compact .tab:not(.is-active) :is(.tab-title, .tab-close, .tab-audio) { display: none; }
 .new-tab-btn { margin: 0 0 5px 4px; flex-shrink: 0; }
 
 /* ===== View header (navigation + omnibox) ===== */

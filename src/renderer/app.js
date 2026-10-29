@@ -71,7 +71,7 @@ async function resolveInput(raw) {
 function createTab({ url = homepage(), private: priv = false, background = false, lazy = false, title, index } = {}) {
   const tab = {
     id: ++tabSeq, url, title: title || (isNewTab(url) ? 'New tab' : url), favicon: null, loading: false,
-    private: priv, blocked: 0, wcId: null, ready: false, zoom: 0, audible: false, muted: false, wv: null,
+    private: priv, blocked: 0, wcId: null, ready: false, zoom: 0, audible: false, muted: false, wv: null, lastActive: Date.now(),
   };
   const at = index ?? (state.activeId ? state.tabs.indexOf(activeTab()) + 1 : state.tabs.length);
   state.tabs.splice(at, 0, tab);
@@ -168,7 +168,10 @@ function showErrorPage(tab, url, code, desc) {
 function activateTab(id) {
   const tab = state.tabs.find((t) => t.id === id);
   if (!tab) return;
+  const prev = activeTab();
+  if (prev) prev.lastActive = Date.now();
   state.activeId = id;
+  tab.lastActive = Date.now();
   ensureWebview(tab);
   for (const t of state.tabs) t.wv?.classList.toggle('is-active', t.id === id);
   $('hover-url').classList.add('hidden');
@@ -179,6 +182,34 @@ function activateTab(id) {
   if (isNewTab(tab.url)) setTimeout(() => focusAddress(), 0);
   else tab.wv.focus();
   if (state.settings.sidebarView === 'tabs') renderSidebar();
+}
+
+// Memory Saver: a tab you haven't looked at for a while gives back its memory. It keeps its place,
+// title and icon, and loads again when you switch to it. Tabs playing sound or still loading,
+// and private tabs (whose page would be lost for good), are left alone.
+const SLEEP_AFTER = 15 * 60000;
+function sleepIdleTabs() {
+  if (!state.settings.memorySaver) return;
+  let slept = false;
+  for (const tab of state.tabs) {
+    if (!tab.wv || tab.id === state.activeId || tab.private || tab.audible || tab.loading || isNewTab(tab.url)) continue;
+    if (Date.now() - tab.lastActive < SLEEP_AFTER) continue;
+    tab.wv.remove();
+    Object.assign(tab, { wv: null, ready: false, wcId: null });
+    slept = true;
+  }
+  if (slept) renderTabs();
+}
+
+// Opens every tab that's open in Safari, after the ones already here. They load when you open them.
+async function bringSafariTabs() {
+  let tabs;
+  try { tabs = await L.importer.safariTabs(); } catch (err) { return notice(cleanError(err), { type: 'error', timeout: 10000 }); }
+  if (!tabs) return notice('Open Safari first, then try again.');
+  const have = new Set(state.tabs.map((t) => t.url));
+  const fresh = tabs.filter((t) => !have.has(t.url));
+  for (const t of fresh) createTab({ url: t.url, title: t.title, background: true, lazy: true, index: state.tabs.length });
+  notice(fresh.length ? `Brought over ${fresh.length} tab${fresh.length === 1 ? '' : 's'} from Safari` : tabs.length ? 'Those Safari tabs are already open here.' : 'Safari has no tabs open.', { type: fresh.length ? 'success' : undefined });
 }
 
 function closeTab(id) {
@@ -213,20 +244,42 @@ function tabFavicon(tab) {
   if (tab.loading && !isInternal(tab.url)) wrap.append(h('span', { class: 'spin' }, icon('loader', 14)));
   else if (tab.private) wrap.append(icon('incognito', 14));
   else if (isInternal(tab.url)) wrap.append(appLogo(14));
-  else if (tab.favicon) {
-    const img = h('img', { src: tab.favicon, draggable: 'false' });
-    img.onerror = () => img.replaceWith(icon('globe', 14));
-    wrap.append(img);
-  } else wrap.append(icon('globe', 14));
+  else {
+    // A tab that hasn't loaded yet (asleep, restored or brought over from Safari) uses the icon
+    // saved from an earlier visit, or else asks the site itself for its standard one (not while
+    // the VPN is on: the tab bar's requests don't go through it, so they'd show your address).
+    let src = tab.favicon || faviconCache.get(hostOf(tab.url));
+    if (!src && !state.settings.vpn.enabled && /^https?:/.test(tab.url)) { try { src = new URL(tab.url).origin + '/favicon.ico'; } catch {} }
+    if (src) {
+      const img = h('img', { src, draggable: 'false' });
+      img.onerror = () => img.replaceWith(icon('globe', 14));
+      wrap.append(img);
+    } else wrap.append(icon('globe', 14));
+  }
   return wrap;
 }
 
 let dragTabId = null;
+let scrolledTo = null; // the active tab last scrolled into view
+const MAX_TAB = 220, ICON_TAB = 36, ACTIVE_COMPACT_TAB = 180;
 function renderTabs() {
   const strip = $('tabs');
+  const scroll = strip.scrollLeft; // replacing the tabs would jump back to the start
+  // Tabs share the strip until they'd get too narrow to read; then they shrink to just their icon
+  // (the open tab keeps its title), and past that the strip scrolls.
+  // Free space in the strip: minus its padding (Windows keeps room for the window buttons) and
+  // the new-tab button.
+  const bar = strip.parentElement;
+  const pad = getComputedStyle(bar);
+  const room = bar.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight) - (bar.querySelector('.new-tab-btn')?.offsetWidth || 0) - 12;
+  const share = Math.floor(room / Math.max(1, state.tabs.length));
+  const compact = share < 100;
+  strip.classList.toggle('is-compact', compact);
+  strip.style.setProperty('--tab-width', `${compact ? ICON_TAB : Math.min(MAX_TAB, share)}px`);
+  strip.style.setProperty('--active-tab-width', `${compact ? ACTIVE_COMPACT_TAB : Math.min(MAX_TAB, share)}px`);
   strip.replaceChildren(...state.tabs.map((tab, index) => {
     const el = h('div', {
-      class: `tab ${tab.id === state.activeId ? 'is-active' : ''} ${tab.private ? 'is-private' : ''} ${tab.audible ? 'is-audible' : ''}`,
+      class: `tab ${tab.id === state.activeId ? 'is-active' : ''} ${tab.private ? 'is-private' : ''} ${tab.audible ? 'is-audible' : ''} ${tab.wv ? '' : 'is-asleep'}`,
       title: `${tab.title}\n${tab.url}`,
       draggable: 'true',
       onmousedown: (e) => { if (e.button === 0 && !e.target.closest('.clickable-icon')) activateTab(tab.id); },
@@ -252,6 +305,11 @@ function renderTabs() {
     h('button', { class: 'clickable-icon tab-close', 'aria-label': 'Close tab', onclick: () => closeTab(tab.id) }, icon('x', 14)));
     return el;
   }));
+  strip.scrollLeft = scroll;
+  if (scrolledTo !== state.activeId) {
+    scrolledTo = state.activeId;
+    strip.querySelector('.tab.is-active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   document.title = `${activeTab()?.title || 'New tab'} — Link`;
 }
 
@@ -532,10 +590,14 @@ function bindOmnibox() {
         title: en.name, img: engineIcon(en), checked: en.id === state.settings.searchEngine,
         onClick: async () => {
           await setSettings({ searchEngine: en.id });
+          // Picking an engine over a search (typed, or the one on screen) runs it there right away;
+          // over a web address it only changes the engine for next time.
+          const q = typed.trim();
+          if (q && (await resolveInput(q)) === searchUrl(q, en)) return navigateTo(searchUrl(q, en));
           input.value = typed;
           input.focus();
           paintEngineChip();
-          if (typed.trim()) updateSuggestions();
+          if (q) updateSuggestions();
         },
       })),
       '-',
@@ -593,10 +655,12 @@ function showSidebar(view) {
 function renderSidebarChrome() {
   const s = state.settings;
   $('sidebar').classList.toggle('is-collapsed', !s.sidebarOpen);
+  // Clicking the open panel's icon again, or the ×, closes the sidebar.
   $('sidebar-tabs').replaceChildren(...SIDEBAR_VIEWS.map(([id, ic, label]) => h('button', {
     class: `clickable-icon ${s.sidebarView === id ? 'is-active' : ''}`, 'aria-label': label, title: label,
-    onclick: () => setSettings({ sidebarView: id }),
-  }, icon(ic, 17))));
+    onclick: () => setSettings(s.sidebarView === id ? { sidebarOpen: false } : { sidebarView: id }),
+  }, icon(ic, 17))),
+  h('button', { class: 'clickable-icon sidebar-close', 'aria-label': 'Close sidebar', title: 'Close sidebar (Ctrl+\\)', onclick: () => setSettings({ sidebarOpen: false }) }, icon('x', 16)));
 }
 
 let historyQuery = '';
@@ -846,18 +910,70 @@ async function refreshVpnInfo() {
 }
 
 // A site (usually a search engine) blocked the VPN: let you choose what to do, never decide for you.
-function onVpnBlocked({ id, name, host, retryUrl, query }) {
+async function onVpnBlocked({ id, name, host, retryUrl, query, partial, auto }) {
   const tab = state.tabs.find((t) => t.wcId === id);
   if (!tab) return;
+  if (auto) return bypassVpnFor(tab, host, retryUrl);
   const el = notice(h('div', { class: 'notice-body' },
-    h('div', {}, h('b', {}, name), ' blocks VPN connections.'),
+    partial
+      ? h('div', {}, h('b', {}, name), ' is blocking parts of this page over the VPN, so it may look broken.')
+      : h('div', {}, h('b', {}, name), ' blocks VPN connections.'),
     h('div', { class: 'notice-actions' },
+      // Ways that keep the VPN come first; going around it is the last resort.
+      startpageButton(name, query, tab, () => el.remove(), 'mod-cta'),
+      tryAgainButton(tab, retryUrl, () => el.remove()),
+      query ? btn('Use Link Search', () => { el.remove(); loadIn(tab, `link://search/?q=${encodeURIComponent(query)}`); }) : null,
       btn(`Open ${name} without VPN`, async () => {
         el.remove();
         await setSettings({ vpn: { bypass: [...new Set([...(state.settings.vpn.bypass || []), host])] } });
         loadIn(tab, retryUrl);
-      }, 'mod-cta'),
-      query ? btn('Use Link Search', () => { el.remove(); loadIn(tab, `link://search/?q=${encodeURIComponent(query)}`); }) : null)),
+      }))),
+  { timeout: 20000 });
+}
+
+// Link has already moved to another VPN exit in the background; this tries the page on it.
+function tryAgainButton(tab, url, close) {
+  if (state.settings.vpn.mode !== 'tor' || !url) return null;
+  return btn('Try again', () => { close(); loadIn(tab, url); });
+}
+
+// Opens a site that blocks the VPN without it, and remembers that (Settings → VPN lists these).
+async function bypassVpnFor(tab, host, url) {
+  const bypass = state.settings.vpn.bypass || [];
+  await setSettings({ vpn: { bypass: [...new Set([...bypass, host])] } });
+  loadIn(tab, url);
+  const el = notice(h('div', { class: 'notice-body' },
+    h('div', {}, h('b', {}, host), ' blocks VPN connections, so Link opened it without the VPN. This site can see your real IP address.'),
+    h('div', { class: 'notice-actions' },
+      btn('Undo', async () => {
+        el.remove();
+        await setSettings({ vpn: { bypass: (state.settings.vpn.bypass || []).filter((x) => x !== host) } });
+        loadIn(tab, url);
+      }))),
+  { timeout: 20000 });
+}
+
+// Startpage shows Google's results without Google's robot checks or its guess at your location.
+function startpageButton(name, query, tab, close, kind) {
+  const startpage = state.engines.find((e) => e.id === 'startpage');
+  if (!query || !startpage || name === startpage.name) return null;
+  return btn('Search with Startpage', () => { close(); loadIn(tab, searchUrl(query, startpage)); }, kind);
+}
+
+// Any country usually has an exit Google places right.
+function onVpnMisplaced({ id, name, place, country, query, retryUrl }) {
+  const tab = state.tabs.find((t) => t.wcId === id);
+  if (!tab) return;
+  const el = notice(h('div', { class: 'notice-body' },
+    h('div', {}, h('b', {}, name), ` places this VPN in ${place}${country ? `, not ${country}` : ''}.`),
+    h('div', { class: 'notice-actions' },
+      state.settings.vpn.country ? btn('Use any country', async () => {
+        el.remove();
+        await setSettings({ vpn: { country: '' } });
+        loadIn(tab, tab.url);
+      }, 'mod-cta') : null,
+      startpageButton(name, query, tab, () => el.remove()),
+      tryAgainButton(tab, retryUrl, () => el.remove()))),
   { timeout: 20000 });
 }
 
@@ -1111,7 +1227,7 @@ function runAction(action, anchor) {
     case 'print': return ready && tab.wv.print();
     case 'save-page': return ready && L.savePage(tab.wcId);
     case 'view-source': return tab && !isInternal(tab.url) && createTab({ url: 'view-source:' + tab.url });
-    case 'devtools': return ready && (tab.wv.isDevToolsOpened() ? tab.wv.closeDevTools() : tab.wv.openDevTools());
+    case 'devtools': return ready && L.toggleDevTools(tab.wcId);
     case 'protection': return openShieldPopover(anchor);
     case 'toggle-adblock': return setSettings({ adblock: { enabled: !state.settings.adblock.enabled } }).then((s) => notice(`Ad blocker ${s.adblock.enabled ? 'on' : 'off'}`));
     case 'vpn': return openVpnPopover(anchor);
@@ -1224,6 +1340,7 @@ async function boot() {
   L.on.notice((message) => notice(message, { timeout: 6000 }));
   L.on.guestMousedown(() => { hideSuggestions(); closeFloating(); });
   L.on.vpnBlocked(onVpnBlocked);
+  L.on.vpnMisplaced(onVpnMisplaced);
   state.vpnStatus = s.vpnStatus;
   L.on.blocked(({ id, count, total }) => {
     state.totalBlocked = total;
@@ -1249,6 +1366,14 @@ async function boot() {
   } else createTab();
 
   renderSidebar();
+  setInterval(sleepIdleTabs, 60000);
+  // A mouse wheel scrolls the tab strip sideways (trackpads already swipe it).
+  $('tabs').addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    $('tabs').scrollLeft += e.deltaY;
+  }, { passive: false });
+  window.addEventListener('resize', () => renderTabs());
   if (s.settings.vpn.enabled && s.vpnStatus.state === 'connected') refreshVpnInfo();
   if (!s.settings.onboarded) openWelcome();
 }

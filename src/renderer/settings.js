@@ -52,6 +52,7 @@ const PANES = {
       h('p', { class: 'setting-intro' }, 'Startup, homepage and everyday behaviour.'),
       settingItem('Homepage', 'Page that opens in new tabs and with Alt+Home. Leave empty for the Link start page.', homeInput),
       settingItem('Restore tabs on startup', 'Reopen the tabs you had open last time (private tabs are never restored).', toggle(s.restoreTabs, (v) => setSettings({ restoreTabs: v }))),
+      settingItem('Memory Saver', 'Tabs you haven’t opened for 15 minutes free their memory, and reload when you go back to them. Tabs playing sound and private tabs stay awake.', toggle(s.memorySaver, (v) => setSettings({ memorySaver: v }))),
       settingItem('Search suggestions', 'Show live suggestions from your search engine while you type in the address bar.', toggle(s.suggestions, (v) => setSettings({ suggestions: v }))),
       settingItem('Default browser', 'Open web links from other apps in Link.', btn('Make Link my default browser', async () => {
         await L.makeDefaultBrowser();
@@ -227,12 +228,14 @@ const PANES = {
           h('b', {}, 'Link VPN is built in and free. '), 'Just turn it on — there’s nothing to install or sign up for. It sends your traffic through three encrypted relays run by volunteers around the world (the Tor network), so no single server knows both who you are and what you visit. The first time, Link takes about 20 MB to set it up. It’s slower than a paid VPN, and some sites (especially Google) may ask you to solve a captcha.'),
         settingItem('Country', 'Choose where websites think you are. “Fastest” picks automatically; a specific country can be slower.',
           dropdown(VPN_COUNTRIES, v.country || '', (country) => { state.vpnInfo = null; save({ country }).then(rerender(el, 'vpn')); })),
+        settingItem('Skip the VPN on sites that block it', 'When a site refuses VPN connections or breaks over them, Link opens it directly instead and lists it below. Those sites see your real IP address. Search engines always stay on the VPN.',
+          toggle(v.autoBypass, (on) => save({ autoBypass: on }))),
         settingItem('Hide my location too', 'While the VPN is on, websites can’t get your device’s location. If a search engine blocks VPN connections, Link shows the search in Link Search instead.'),
       );
     }
     if (v.bypass?.length) {
       el.append(settingHeading('Sites that skip the VPN'),
-        h('p', { class: 'setting-intro' }, 'These sites block VPN connections, so you chose to open them directly. They can see your real IP address.'),
+        h('p', { class: 'setting-intro' }, 'These sites block VPN connections, so they open directly. They can see your real IP address.'),
         h('div', { class: 'card-list' }, v.bypass.map((host) => h('div', { class: 'card' },
           h('div', { class: 'card-icon' }, faviconEl('https://' + host, 'globe', 18)),
           h('div', { class: 'card-body' }, h('div', { class: 'card-title' }, host)),
@@ -374,6 +377,7 @@ const PANES = {
     if (!sources.length) box.append(h('div', { class: 'empty-state' }, 'No other browsers found. You can still import files below.'));
     for (const src of sources) box.append(importCard(src));
     el.append(box,
+      state.platform === 'darwin' ? settingItem('Safari tabs', 'Open every tab you have open in Safari here. Safari needs to be open; macOS asks you to allow this the first time.', btn('Bring over tabs', bringSafariTabs, 'mod-cta')) : null,
       settingHeading('Import from a file'),
       settingItem('Bookmarks HTML file', 'Every browser can export bookmarks as an HTML file — Safari, Firefox, Chrome, Edge, Opera and more.', btn('Choose file…', async () => {
         try {
@@ -405,7 +409,7 @@ const PANES = {
 };
 
 function importCard(src, compact = false) {
-  const types = { bookmarks: true, history: true, extensions: src.kind === 'chromium' };
+  const types = src.kind === 'safari' ? { bookmarks: true, history: true, cookies: true } : { bookmarks: true, history: true, extensions: src.kind === 'chromium' };
   const result = h('div');
   const button = btn('Import', async () => {
     const chosen = Object.keys(types).filter((k) => types[k]);
@@ -418,9 +422,11 @@ function importCard(src, compact = false) {
       if (chosen.includes('bookmarks')) parts.push(`${r.bookmarks} bookmarks`);
       if (chosen.includes('history')) parts.push(`${r.history.toLocaleString()} history entries`);
       if (chosen.includes('extensions')) parts.push(`${r.extensions} extensions`);
+      if (chosen.includes('cookies')) parts.push(`${r.cookies.toLocaleString()} cookies (you stay signed in to those sites)`);
       result.replaceChildren(
         h('div', { class: 'result-line' }, '✓ Imported ' + parts.join(', ')),
         ...r.errors.map((e) => h('div', { class: 'result-line is-error' }, e)),
+        r.needsFullDiskAccess ? h('div', { class: 'result-line' }, btn('Open Full Disk Access settings', () => L.importer.fullDiskAccess())) : null,
         r.extensionErrors.length ? h('div', { class: 'result-line is-error' }, `${r.extensionErrors.length} extension(s) could not be loaded.`) : null);
       button.textContent = 'Import again';
     } catch (err) {

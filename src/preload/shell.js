@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('link', {
   upgradeUrl: invoke('upgrade-url'),
   blockedFor: invoke('blocked:get'),
   saveSession: invoke('session:save'),
-  importer: { detect: invoke('import:detect'), run: invoke('import:run'), file: invoke('import:file') },
+  importer: { detect: invoke('import:detect'), run: invoke('import:run'), file: invoke('import:file'), safariTabs: invoke('import:safariTabs'), fullDiskAccess: invoke('import:fullDiskAccess') },
   extensions: {
     list: invoke('ext:list'),
     install: invoke('ext:install'),
@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('link', {
   downloads: { open: invoke('download:open'), show: invoke('download:show'), cancel: invoke('download:cancel') },
   savePage: invoke('page:save'),
   makeDefaultBrowser: invoke('app:default-browser'),
+  toggleDevTools: invoke('devtools:toggle'),
   on: {
     shortcut: on('shortcut'),
     openTab: on('open-tab'),
@@ -52,5 +53,6 @@ contextBridge.exposeInMainWorld('link', {
     notice: on('notice'),
     guestMousedown: on('guest-mousedown'),
     vpnBlocked: on('vpn-blocked'),
+    vpnMisplaced: on('vpn-misplaced'),
   },
 });

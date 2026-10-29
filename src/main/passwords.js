@@ -1,16 +1,79 @@
-// Password vault. Passwords are encrypted with the OS keychain (DPAPI / Keychain / libsecret) via safeStorage.
-const { safeStorage } = require('electron');
+// Password vault, kept only on this computer and never sent anywhere.
+//
+// vault.bin holds every entry (site, username, password) as one AES-256-GCM encrypted blob, so the
+// file is unreadable bytes and any change to it is detected. Its 256-bit key is random and stored
+// in vault.key, itself encrypted with safeStorage, whose key lives in the macOS Keychain (DPAPI on
+// Windows, libsecret on Linux) where only Link may read it. Copying the files elsewhere is useless
+// without this Mac's Keychain. Entries are decrypted only when needed and never kept in memory.
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { app, safeStorage } = require('electron');
 const store = require('./store');
 
-let vault = null;
-const load = () => (vault = vault || store.readJSON('passwords', []));
-const save = () => store.writeJSON('passwords', vault, true);
+const MAGIC = Buffer.from('LINKVAULT1');
+const vaultFile = () => path.join(app.getPath('userData'), 'vault.bin');
+const keyFile = () => path.join(app.getPath('userData'), 'vault.key');
 
-function encrypt(text) {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is not available on this system.');
-  return safeStorage.encryptString(text).toString('base64');
+function writePrivate(file, data) {
+  fs.writeFileSync(file + '.tmp', data, { mode: 0o600 });
+  fs.renameSync(file + '.tmp', file);
 }
-const decrypt = (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'));
+
+// Overwrites a file with random bytes before deleting it, so the old contents aren't left on disk.
+function shred(file) {
+  try {
+    fs.writeFileSync(file, crypto.randomBytes(fs.statSync(file).size));
+    fs.unlinkSync(file);
+  } catch {}
+}
+
+let key = null; // the vault key, unwrapped once per run
+function vaultKey() {
+  if (key) return key;
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is not available on this system.');
+  if (fs.existsSync(keyFile())) {
+    key = Buffer.from(safeStorage.decryptString(fs.readFileSync(keyFile())), 'hex');
+  } else {
+    key = crypto.randomBytes(32);
+    writePrivate(keyFile(), safeStorage.encryptString(key.toString('hex')));
+  }
+  return key;
+}
+
+function read() {
+  migrate();
+  if (!fs.existsSync(vaultFile())) return [];
+  const blob = fs.readFileSync(vaultFile());
+  if (!blob.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error('The password vault is damaged.');
+  const iv = blob.subarray(MAGIC.length, MAGIC.length + 12);
+  const tag = blob.subarray(MAGIC.length + 12, MAGIC.length + 28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey(), iv);
+  decipher.setAAD(MAGIC);
+  decipher.setAuthTag(tag);
+  return JSON.parse(Buffer.concat([decipher.update(blob.subarray(MAGIC.length + 28)), decipher.final()]).toString('utf8'));
+}
+
+function write(entries) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', vaultKey(), iv);
+  cipher.setAAD(MAGIC);
+  const body = Buffer.concat([cipher.update(JSON.stringify(entries), 'utf8'), cipher.final()]);
+  writePrivate(vaultFile(), Buffer.concat([MAGIC, iv, cipher.getAuthTag(), body]));
+}
+
+// Older versions kept passwords.json with only the passwords encrypted; move it into the vault.
+let migrated = false;
+function migrate() {
+  if (migrated) return;
+  migrated = true;
+  const old = path.join(app.getPath('userData'), 'passwords.json');
+  if (!fs.existsSync(old)) return;
+  const entries = JSON.parse(fs.readFileSync(old, 'utf8'))
+    .map(({ password, ...rest }) => ({ ...rest, password: safeStorage.decryptString(Buffer.from(password, 'base64')) }));
+  write([...(fs.existsSync(vaultFile()) ? read() : []), ...entries]);
+  shred(old);
+}
 
 function parseCsv(text) {
   const out = [];
@@ -34,7 +97,7 @@ function parseCsv(text) {
 
 // Accepts the CSV exports of Chrome, Edge, Brave, Opera, Firefox, Safari, Bitwarden and 1Password.
 function importCsv(text) {
-  load();
+  const vault = read();
   const [header, ...lines] = parseCsv(text.replace(/^﻿/, ''));
   const col = (...names) => header.findIndex((h) => names.includes(h.trim().toLowerCase()));
   const iUrl = col('url', 'login_uri', 'website', 'origin');
@@ -51,24 +114,23 @@ function importCsv(text) {
     if (vault.some((v) => v.url === url && v.username === username)) continue;
     let name = iName >= 0 ? r[iName] : '';
     if (!name) { try { name = new URL(url).hostname; } catch { name = url; } }
-    vault.push({ id: store.uid(), name, url, username, password: encrypt(password), created: Date.now() });
+    vault.push({ id: store.uid(), name, url, username, password, created: Date.now() });
     added++;
   }
-  save();
+  write(vault);
   return added;
 }
 
-const list = () => load().map(({ password, ...rest }) => rest);
-const reveal = (id) => { const e = load().find((v) => v.id === id); return e ? decrypt(e.password) : ''; };
-function add({ name, url, username, password }) {
-  load().push({ id: store.uid(), name: name || url, url, username, password: encrypt(password), created: Date.now() });
-  save();
-}
-function remove(id) { vault = load().filter((v) => v.id !== id); save(); }
-function forOrigin(origin) {
-  return load()
-    .filter((v) => { try { return new URL(v.url).hostname.replace(/^www\./, '') === new URL(origin).hostname.replace(/^www\./, ''); } catch { return false; } })
-    .map((v) => ({ id: v.id, username: v.username }));
-}
+const sameSite = (a, b) => { try { return new URL(a).hostname.replace(/^www\./, '') === new URL(b).hostname.replace(/^www\./, ''); } catch { return false; } };
 
-module.exports = { importCsv, list, reveal, add, remove, forOrigin };
+const list = () => read().map(({ password, ...rest }) => rest);
+const reveal = (id) => read().find((v) => v.id === id)?.password || '';
+function add({ name, url, username, password }) {
+  const vault = read();
+  vault.push({ id: store.uid(), name: name || url, url, username, password, created: Date.now() });
+  write(vault);
+}
+function remove(id) { write(read().filter((v) => v.id !== id)); }
+const forOrigin = (origin) => read().filter((v) => sameSite(v.url, origin)).map((v) => ({ id: v.id, username: v.username }));
+
+module.exports = { importCsv, list, reveal, add, remove, forOrigin, sameSite };

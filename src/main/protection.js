@@ -130,6 +130,18 @@ async function applyProxy() {
   }
 }
 
+// Built-in VPN only: moves to a different Tor exit (for sites that block or misplace the current one).
+async function switchExit() {
+  await tor.newExit(vpnLocation?.ip);
+  await Promise.all(sessions.map((ses) => ses.closeAllConnections()));
+  vpnLocation = await locateVpn().catch(() => null);
+  return vpnLocation;
+}
+const canSwitchExit = () => {
+  const vpn = store.getSettings().vpn;
+  return vpn.enabled && vpn.mode === 'tor' && tor.isRunning(vpn.country || '');
+};
+
 async function locateVpn() {
   const info = await checkIp();
   return info.error || info.lat == null ? null : info;
@@ -156,7 +168,7 @@ async function checkIp() {
     const { ip } = await (await sessions[0].fetch('https://api.ipify.org?format=json', { cache: 'no-store', signal: AbortSignal.timeout(20000) })).json();
     let geo = {};
     try { geo = await (await net.fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(8000) })).json(); } catch {}
-    return { ip, country: geo.country, city: geo.city, region: geo.region, isp: geo.connection?.isp, lat: geo.latitude, lon: geo.longitude, timezone: geo.timezone?.id };
+    return { ip, country: geo.country, countryCode: geo.country_code, city: geo.city, region: geo.region, isp: geo.connection?.isp, lat: geo.latitude, lon: geo.longitude, timezone: geo.timezone?.id };
   } catch (err) {
     return { error: true, message: err.message };
   }
@@ -289,7 +301,7 @@ function init(sessionList, blockedCallback, vpnCallback) {
 }
 
 module.exports = {
-  init, applyAdblock, applyProxy, applyProxyRules, stopVpn: () => tor.stop(), getVpnLocation: () => vpnLocation, attachToGuest, upgradeUrl, checkIp, encrypt,
+  init, applyAdblock, applyProxy, applyProxyRules, switchExit, canSwitchExit, stopVpn: () => tor.stop(), getVpnLocation: () => vpnLocation, attachToGuest, upgradeUrl, checkIp, encrypt,
   getStats: () => ({ total: totalBlocked }),
   getBlockedFor: (id) => blockedCounts.get(id)?.size || 0,
   isBlockerReady: () => blockingOn,

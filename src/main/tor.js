@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
-const { app, net } = require('electron');
+const { app, net, utilityProcess } = require('electron');
 
 const PREFERRED_PORT = 9155; // not 9150/9050, so it doesn't clash with Tor Browser or a Tor service
 let port = 0;
@@ -23,11 +23,38 @@ const portFree = (p) => new Promise((resolve) => {
 
 // Picks the local port Tor will listen on (another copy of Link may already be using the usual one).
 async function preparePort() {
-  if (port && (proc || (await portFree(port)))) return port;
+  await startRelay();
+  if (port && (proc || (await portFree(port)))) return tellRelay(port);
   for (let p = PREFERRED_PORT; p < PREFERRED_PORT + 40; p++) {
-    if (await portFree(p)) return (port = p);
+    if (await portFree(p)) return tellRelay((port = p));
   }
   throw new Error('No free local port for the VPN.');
+}
+
+// Pages reach Tor through torRelay.js, which saves a trip through the Tor network on every new
+// connection. It keeps its port for as long as Link runs (and gets it back if it ever restarts),
+// since that's the address pages are routed to.
+let relay = null;
+let quitting = false;
+app.on('will-quit', () => { quitting = true; });
+let relayPort = 0;
+function startRelay() {
+  if (relay) return relay.ready;
+  const child = utilityProcess.fork(path.join(__dirname, 'torRelay.js'), [], { serviceName: 'Link VPN relay' });
+  relay = { child };
+  relay.ready = new Promise((resolve, reject) => {
+    child.on('message', (m) => {
+      if (m.port) { relayPort = m.port; resolve(); }
+      if (m.error) reject(new Error(`The VPN could not start: ${m.error}`));
+    });
+  });
+  child.on('exit', () => { relay = null; if (!quitting) setTimeout(() => startRelay().then(() => tellRelay(port)).catch(() => {}), 500); });
+  child.postMessage({ torPort: port, listen: relayPort });
+  return relay.ready;
+}
+function tellRelay(torPort) {
+  relay?.child.postMessage({ torPort });
+  return torPort;
 }
 
 const torDir = () => path.join(app.getPath('userData'), 'tor');
@@ -47,7 +74,10 @@ const torBinary = () => find(path.join(torDir(), 'bundle'), process.platform ===
 async function download(onProgress) {
   const plat = platform();
   if (!plat) throw new Error('The built-in VPN is not available on this system.');
-  const meta = await (await net.fetch(`https://aus1.torproject.org/torbrowser/update_3/release/download-${plat}.json`)).json();
+  // macOS has one version file for both architectures; Windows and Linux have one per architecture.
+  const metaRes = await net.fetch(`https://aus1.torproject.org/torbrowser/update_3/release/download-${process.platform === 'darwin' ? 'macos' : plat}.json`);
+  if (!metaRes.ok) throw new Error(`Could not look up the latest VPN version (${metaRes.status}).`);
+  const meta = await metaRes.json();
   const version = meta.version;
   const base = `https://dist.torproject.org/torbrowser/${version}`;
   const file = `tor-expert-bundle-${plat}-${version}.tar.gz`;
@@ -80,6 +110,20 @@ async function download(onProgress) {
   if (!torBinary()) throw new Error('The VPN package was incomplete.');
 }
 
+// The macOS Tor bundle ships unsigned, and Apple Silicon kills unsigned arm64 programs on launch,
+// so give Tor, its library and the pluggable transports an ad-hoc signature (only once).
+const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, (err) => (err ? reject(err) : resolve())));
+async function signForMac() {
+  if (process.platform !== 'darwin') return;
+  const bin = torBinary();
+  if (await run('codesign', ['-v', bin]).then(() => true, () => false)) return;
+  const dir = path.dirname(bin);
+  const files = [bin, ...fs.readdirSync(dir).filter((f) => f.endsWith('.dylib')).map((f) => path.join(dir, f))];
+  const pt = path.join(dir, 'pluggable_transports');
+  if (fs.existsSync(pt)) files.push(...fs.readdirSync(pt).map((f) => path.join(pt, f)).filter((f) => fs.statSync(f).mode & 0o111));
+  await run('codesign', ['--force', '--sign', '-', ...files]);
+}
+
 function launch(onProgress, country) {
   return new Promise((resolve, reject) => {
     const bin = torBinary();
@@ -90,12 +134,20 @@ function launch(onProgress, country) {
       '--DataDirectory', path.join(torDir(), 'data'),
       '--ClientOnly', '1',
       '--Log', 'notice stdout',
+      // A local control connection, so Link can ask for a fresh exit (see newExit).
+      '--ControlPort', 'auto',
+      '--ControlPortWriteToFile', path.join(torDir(), 'data', 'control-port'),
+      '--CookieAuthentication', '1',
+      // Conflux (splitting a connection over two paths) stops Tor from sending a page's first
+      // bytes along with the connect, which torRelay.js relies on to save a trip per connection.
+      '--ConfluxEnabled', '0',
       ...(geoip ? ['--GeoIPFile', geoip] : []),
       ...(geoip6 ? ['--GeoIPv6File', geoip6] : []),
       // Only leave the Tor network in the chosen country.
       ...(country ? ['--ExitNodes', `{${country}}`, '--StrictNodes', '1'] : []),
     ];
     currentCountry = country;
+    avoided.clear(); // a new Tor starts without them
     const child = spawn(bin, args, { windowsHide: true, cwd: path.dirname(bin) });
     proc = child;
     let done = false;
@@ -118,6 +170,44 @@ function launch(onProgress, country) {
   });
 }
 
+// Sends one command over Tor's control connection and resolves with its reply.
+function control(command) {
+  return new Promise((resolve, reject) => {
+    const dataDir = path.join(torDir(), 'data');
+    let host, ctlPort, cookie;
+    try {
+      [host, ctlPort] = /PORT=([\d.]+):(\d+)/.exec(fs.readFileSync(path.join(dataDir, 'control-port'), 'utf8')).slice(1);
+      cookie = fs.readFileSync(path.join(dataDir, 'control_auth_cookie')).toString('hex');
+    } catch { return reject(new Error('The VPN is not running.')); }
+    const sock = require('net').connect(+ctlPort, host);
+    let reply = '';
+    sock.setTimeout(5000, () => { sock.destroy(); reject(new Error('The VPN did not answer.')); });
+    sock.on('error', reject);
+    sock.on('data', (d) => { reply += d; });
+    sock.on('end', () => (/^250 /m.test(reply) && !/^5\d\d /m.test(reply) ? resolve(reply) : reject(new Error(reply.trim() || 'No reply'))));
+    sock.write(`AUTHENTICATE ${cookie}\r\n${command}\r\nQUIT\r\n`);
+  });
+}
+
+// Switches new connections to a different exit (Tor's "new identity"). With no country chosen,
+// the exit being left (and its neighbours, which sites tend to treat alike) is avoided from then
+// on; with a country chosen there may be too few exits to skip any.
+let lastNewExit = 0;
+const avoided = new Set(); // "a.b.c.0/24" blocks, until Tor restarts
+async function newExit(avoidIp) {
+  if (!proc) throw new Error('The VPN is not running.');
+  if (!currentCountry && /^\d+\.\d+\.\d+\.\d+$/.test(avoidIp || '')) {
+    avoided.add(avoidIp.replace(/\.\d+$/, '.0/24'));
+    if (avoided.size > 64) avoided.delete(avoided.values().next().value);
+    await control(`SETCONF ExcludeExitNodes="${[...avoided].join(',')}"`);
+  }
+  // Tor only honours this once every 10 seconds; wait out the rest rather than be ignored.
+  const wait = lastNewExit + 10500 - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastNewExit = Date.now();
+  await control('SIGNAL NEWNYM');
+}
+
 const isRunning = (country = '') => !!proc && progress === 100 && currentCountry === country;
 
 // Resolves once Tor is connected with the requested exit country; safe to call repeatedly.
@@ -127,6 +217,7 @@ async function start(onProgress, country = '') {
   if (proc) stop(); // switching country
   ready = (async () => {
     if (!torBinary()) await download(onProgress);
+    await signForMac();
     await preparePort();
     await launch(onProgress, country);
   })().finally(() => { ready = null; });
@@ -138,4 +229,5 @@ function stop() {
   progress = 0;
 }
 
-module.exports = { start, stop, preparePort, getPort: () => port, isRunning };
+// getPort is where pages send their traffic: the relay, which passes it on to Tor.
+module.exports = { start, stop, preparePort, newExit, getPort: () => relayPort || port, isRunning };
