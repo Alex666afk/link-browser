@@ -1,6 +1,6 @@
 name: Build Link
 
-# Builds the Windows and macOS apps from the same code. Pushing a tag like v1.0.1 publishes a release.
+# Builds all desktop platforms from the same code. A version tag publishes a release.
 on:
   push:
     tags: ['v*']
@@ -19,6 +19,8 @@ jobs:
             target: --win nsis portable
           - os: macos-latest
             target: --mac dmg zip --x64 --arm64
+          - os: ubuntu-latest
+            target: --linux AppImage deb --x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +43,9 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
-            dist/*.yml
+            dist/*.AppImage
+            dist/*.deb
+            dist/latest*.yml
             dist/*.blockmap
           if-no-files-found: error
       # latest.yml / latest-mac.yml and the .blockmap files are what the in-app updater reads to
@@ -54,5 +58,7 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
-            dist/*.yml
+            dist/*.AppImage
+            dist/*.deb
+            dist/latest*.yml
             dist/*.blockmap

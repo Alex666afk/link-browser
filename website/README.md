@@ -38,6 +38,13 @@ Update `release-notes.json` for curated version notes. Published versions withou
 curated notes use their original release notes; missing notes are identified.
 No version history is invented. Mac downloads only appear when built files exist.
 
+The `Build Linux versions` GitHub workflow builds Linux AppImage and Debian
+packages for the existing version tags, using each tag's original source. It
+checks the packaged source and version and launches each build in a virtual
+display before adding the files to its matching release. Future release tags
+also build Linux through the main build matrix. Run `npm run website:releases`
+after the builds complete to sync every platform into the site's catalogue.
+
 ## Hosting
 
 Publish the website together with `downloads/`. Installer files are deliberately

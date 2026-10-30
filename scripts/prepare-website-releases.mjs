@@ -25,12 +25,13 @@ if (sync) {
     const version = release.tag_name.replace(/^v/, '');
     const directory = path.join(website, 'downloads', version);
     await mkdir(directory, { recursive: true });
-    const downloadable = release.assets.filter(asset => /\.(exe|dmg|zip)$/i.test(asset.name));
+    const downloadable = release.assets.filter(asset => /\.(exe|dmg|zip|AppImage|deb)$/i.test(asset.name));
     const missing = [];
     for (const asset of downloadable) {
       if (path.basename(asset.name) !== asset.name) throw new Error('Invalid release asset name');
       const existing = await stat(path.join(directory, asset.name)).catch(() => null);
       if (!existing || existing.size !== asset.size) missing.push(asset.name);
+      else if (asset.digest?.startsWith('sha256:') && asset.digest !== 'sha256:' + await digest(path.join(directory, asset.name))) missing.push(asset.name);
     }
     if (missing.length) {
       const args = ['release', 'download', release.tag_name, '--repo', repo, '--dir', directory, '--clobber'];
@@ -47,7 +48,7 @@ const currentVersion = packageJson.version;
 if (!/^\d+\.\d+\.\d+(?:[-+.][a-zA-Z0-9.-]+)?$/.test(currentVersion)) throw new Error('Invalid package version');
 const currentDirectory = path.join(website, 'downloads', currentVersion);
 await mkdir(currentDirectory, { recursive: true });
-const localNames = (await readdir(localDirectory).catch(() => [])).filter(name => name.includes(`-${currentVersion}`) && /\.(exe|dmg|zip)$/i.test(name));
+const localNames = (await readdir(localDirectory).catch(() => [])).filter(name => name.includes(`-${currentVersion}`) && /\.(exe|dmg|zip|AppImage|deb)$/i.test(name));
 const alreadyPublished = published.some(release => release.tag_name.replace(/^v/, '') === currentVersion);
 if (!alreadyPublished) {
   for (const name of localNames) await copyFile(path.join(localDirectory, name), path.join(currentDirectory, name));
@@ -73,20 +74,20 @@ for (const release of versions.values()) {
   const assets = [];
   const directory = path.join(website, 'downloads', release.version);
   for (const name of await readdir(directory).catch(() => [])) {
-    if (!/\.(exe|dmg|zip)$/i.test(name)) continue;
+    if (!/\.(exe|dmg|zip|AppImage|deb)$/i.test(name)) continue;
     const file = path.join(directory, name);
     const info = await stat(file);
     const sha256 = await digest(file);
     const original = release.publishedAssets.find(asset => asset.name === name);
     if (original && original.size !== info.size) throw new Error(`Incomplete download: ${name}`);
     if (original?.digest?.startsWith('sha256:') && original.digest !== 'sha256:' + sha256) throw new Error(`Checksum mismatch: ${name}`);
-    const platform = name.endsWith('.exe') ? 'win' : /mac/i.test(name) || name.endsWith('.dmg') ? 'mac' : 'other';
+    const platform = name.endsWith('.exe') ? 'win' : /mac/i.test(name) || name.endsWith('.dmg') ? 'mac' : /linux/i.test(name) || name.endsWith('.deb') || /\.AppImage$/i.test(name) ? 'linux' : 'other';
     const arch = /arm64/i.test(name) ? 'arm64' : /x64/i.test(name) || platform === 'win' ? 'x64' : '';
-    const kind = /portable/i.test(name) ? 'portable' : name.endsWith('.zip') ? 'archive' : 'installer';
+    const kind = /portable|\.AppImage$/i.test(name) ? 'portable' : name.endsWith('.zip') ? 'archive' : 'installer';
     assets.push({ name, path: `downloads/${release.version}/${encodeURIComponent(name)}`, size: info.size, sha256, platform, arch, kind });
   }
   if (!assets.length) continue;
-  const platformOrder = { win: 0, mac: 1, other: 2 };
+  const platformOrder = { win: 0, mac: 1, linux: 2, other: 3 };
   const kindOrder = { installer: 0, portable: 1, archive: 2 };
   assets.sort((a, b) => platformOrder[a.platform] - platformOrder[b.platform] || kindOrder[a.kind] - kindOrder[b.kind] || a.name.localeCompare(b.name));
   const entry = notes[release.version];

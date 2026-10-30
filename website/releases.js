@@ -7,7 +7,7 @@ const status = document.getElementById('release-status');
 const retry = document.getElementById('release-retry');
 const primary = document.getElementById('primary');
 const userPlatform = navigator.userAgentData?.platform || navigator.platform || '';
-const detected = /Win/i.test(userPlatform) ? 'win' : /Mac/i.test(userPlatform) ? 'mac' : 'all';
+const detected = /Win/i.test(userPlatform) ? 'win' : /Mac/i.test(userPlatform) ? 'mac' : /Linux/i.test(userPlatform) && !/Android/i.test(navigator.userAgent || '') ? 'linux' : 'all';
 let releases = [];
 
 function element(tag, className, text) {
@@ -46,7 +46,7 @@ function render() {
       options.append(option);
       downloads++;
     }
-    if (!assets.length) options.append(element('p', 'empty-downloads', `No ${platform.value === 'mac' ? 'macOS' : platform.value === 'win' ? 'Windows' : ''} files are available for this version. Choose another version or platform.`));
+    if (!assets.length) options.append(element('p', 'empty-downloads', `No ${{ mac: 'macOS', win: 'Windows', linux: 'Linux' }[platform.value] || ''} files are available for this version. Choose another version or platform.`));
     const notes = element('div', 'release-notes');
     notes.append(element('h4', '', "What's new"));
     if (release.notes.length) {
@@ -89,9 +89,9 @@ async function load() {
     platform.value = detected;
     const preferred = releases.find(release => release.assets.some(asset => detected === 'all' || asset.platform === detected)) || releases[0];
     version.value = preferred.version;
-    const latest = ['win', 'mac'].map(os => {
+    const latest = ['win', 'mac', 'linux'].map(os => {
       const release = releases.find(item => item.assets.some(asset => asset.platform === os));
-      return release ? `${os === 'win' ? 'Windows' : 'macOS'} ${release.version}` : null;
+      return release ? `${{ win: 'Windows', mac: 'macOS', linux: 'Linux' }[os]} ${release.version}` : null;
     }).filter(Boolean);
     document.getElementById('latest-version').textContent = latest.join(' · ');
     if (detected === 'win') {
@@ -102,6 +102,7 @@ async function load() {
         primary.textContent = `Download for Windows ↓`;
       }
     } else if (detected === 'mac') primary.textContent = 'Choose macOS download ↓';
+    else if (detected === 'linux') primary.textContent = 'Choose Linux download ↓';
     version.disabled = platform.disabled = false;
     render();
   } catch {

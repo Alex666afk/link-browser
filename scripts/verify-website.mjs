@@ -30,6 +30,8 @@ for (const release of catalogue.releases) {
 assert.throws(() => downloadUrl({ path: 'https://example.com/setup.exe' }, 'http://localhost:8080/'));
 assert.throws(() => downloadUrl({ path: 'downloads/../../secret.exe' }, 'http://localhost:8080/'));
 assert.throws(() => downloadUrl({ path: 'downloads/page.html' }, 'http://localhost:8080/'));
+assert.match(downloadUrl({ path: 'downloads/1.0.1/Link-1.0.1-linux-x64.AppImage' }, 'http://localhost:8080/'), /\.AppImage$/);
+assert.match(downloadLabel({ platform: 'linux', arch: 'x64', name: 'Link-1.0.1-linux-x64.deb' }), /Debian/);
 
 class Node {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.attributes = {}; this.style = {}; this.listeners = {}; this.value = ''; this.textContent = ''; this.hidden = false; }
@@ -64,7 +66,12 @@ assert.equal(mac.get('release-platform').value, 'mac');
 const macRelease = catalogue.releases.find(release => release.assets.some(asset => asset.platform === 'mac'));
 assert.equal(mac.get('release-version').value, macRelease.version);
 assert.match(mac.get('primary').textContent, /Choose macOS/);
+const linux = await browser('Linux x86_64');
+assert.equal(linux.get('release-platform').value, 'linux');
+const linuxRelease = catalogue.releases.find(release => release.assets.some(asset => asset.platform === 'linux'));
+if (linuxRelease) assert.equal(linux.get('release-version').value, linuxRelease.version);
+assert.match(linux.get('primary').textContent, /Choose Linux/);
 const failed = await browser('Win32', true);
 assert.equal(failed.get('release-retry').hidden, false);
 assert.match(failed.get('release-status').textContent, /could not be loaded/);
-console.log(`Verified ${catalogue.releases.length} versions, ${links.length} local downloads, release notes, Windows/macOS defaults, filters, and load-error recovery.`);
+console.log(`Verified ${catalogue.releases.length} versions, ${links.length} local downloads, release notes, platform defaults, filters, and load-error recovery.`);
