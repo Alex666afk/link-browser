@@ -1,0 +1,21 @@
+{
+  "1.0.0": {
+    "notes": [
+      "Initial Link release for Windows and macOS.",
+      "Sidebar browsing, private tabs, themes, bookmarks, history and downloads.",
+      "Built-in ad and tracker blocking, Tor VPN, flexible search and Chrome extension support.",
+      "Browser data imports and a local password manager."
+    ],
+    "source": "Initial-release summary based on the v1.0.0 source tag; the published release has no separate changelog."
+  },
+  "1.0.1": {
+    "notes": [
+      "Added video downloads from the page menu, with progress shown in Link.",
+      "Added automatic closing of unused tabs and passwords grouped by website.",
+      "Added built-in update checks and improved VPN exit-country consistency.",
+      "Expanded cookie imports, including cookies.txt and JSON files, and fixed import labels.",
+      "Improved VPN routing, encrypted password and cookie storage, Safari imports, tabs and sidebar behavior."
+    ],
+    "source": "Changes since v1.0.0, summarized from the shared app commit history."
+  }
+}

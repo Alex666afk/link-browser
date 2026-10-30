@@ -9,7 +9,9 @@
     "start": "electron .",
     "dist": "electron-builder --win nsis portable",
     "dist:win": "electron-builder --win nsis portable",
-    "dist:mac": "electron-builder --mac dmg zip --x64 --arm64"
+    "dist:mac": "electron-builder --mac dmg zip --x64 --arm64",
+    "website:releases": "node scripts/prepare-website-releases.mjs --sync",
+    "website:check": "node scripts/verify-website.mjs"
   },
   "license": "MIT",
   "private": true,

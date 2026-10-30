@@ -3,226 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Link — a private, extensible browser</title>
-<meta name="description" content="Link is a private, extensible web browser with an Obsidian-style interface. Built-in ad and tracker blocking, a free VPN, your choice of search engines, and Chrome extensions.">
+<title>Link — your browser, your way</title>
+<meta name="description" content="Link brings private browsing, a free built-in Tor VPN, Chrome extensions, flexible search and everyday tools together. Downloads and version history.">
 <meta property="og:title" content="Link browser">
-<meta property="og:description" content="A private, extensible web browser. Ad blocking, a free built-in VPN, and Chrome extensions.">
+<meta property="og:description" content="Link downloads, features and release notes.">
 <link rel="icon" href="icon.png">
-<style>
-  :root {
-    --bg: #1a1a1a; --panel: #212121; --border: #333; --text: #e4e4e4; --muted: #a0a0a0;
-    --faint: #6c6c6c; --accent: #8a6cef; --accent-text: #fff;
-    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #fbfbfb; --panel: #fff; --border: #e5e5e5; --text: #1f1f1f; --muted: #5c5c5c; --faint: #9a9a9a; }
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; -webkit-font-smoothing: antialiased; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
-
-  header { padding: 80px 0 48px; text-align: center; }
-  .logo { width: 72px; height: 72px; margin: 0 auto 24px; display: block; }
-  h1 { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
-  .tagline { font-size: 18px; color: var(--muted); margin: 0 auto; max-width: 480px; }
-
-  .downloads { margin: 40px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-    background: var(--accent); color: var(--accent-text); font-size: 16px; font-weight: 600;
-    padding: 13px 28px; border-radius: 10px; border: 0; cursor: pointer; min-width: 280px;
-  }
-  .btn:hover { background: #7a5ce0; text-decoration: none; }
-  .btn svg { width: 20px; height: 20px; }
-  .btn .sub { font-weight: 400; opacity: 0.8; font-size: 14px; }
-  .alt-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; font-size: 14px; color: var(--muted); }
-  .alt-links a { color: var(--muted); }
-  .alt-links a:hover { color: var(--accent); }
-  .version { color: var(--faint); font-size: 13px; margin-top: 6px; }
-
-  .showcase { position: relative; margin: 16px 0 8px; padding: 44px 0 20px; display: flex; justify-content: center; perspective: 1800px; }
-  .glow { position: absolute; top: 4%; left: 50%; width: 130%; max-width: 980px; height: 62%; transform: translateX(-50%);
-    background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 55%, transparent), transparent 68%); filter: blur(70px); z-index: 0; pointer-events: none; opacity: 0.8; }
-  @media (prefers-color-scheme: light) { .glow { opacity: 0.45; } }
-  .window { position: relative; z-index: 1; width: 100%; max-width: 860px; border-radius: 14px; overflow: hidden;
-    border: 1px solid var(--border); background: #1b1b1b;
-    box-shadow: 0 40px 90px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
-    transform: rotateX(7deg); transform-origin: center top; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
-  .showcase:hover .window { transform: rotateX(0deg); }
-  .winbar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; background: #262626; border-bottom: 1px solid #333; }
-  .dot { width: 11px; height: 11px; border-radius: 50%; }
-  .dot.red { background: #ff5f57; } .dot.yellow { background: #febc2e; } .dot.green { background: #28c840; }
-  .window img { display: block; width: 100%; height: auto; }
-
-  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; padding: 56px 0; border-top: 1px solid var(--border); margin-top: 40px; }
-  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } header { padding-top: 56px; } h1 { font-size: 32px; } }
-  .feature h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
-  .feature p { font-size: 14px; color: var(--muted); margin: 0; }
-
-  .compare { padding: 56px 0; border-top: 1px solid var(--border); }
-  .compare h2, .cta h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 20px; text-align: center; }
-  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
-  th, td { padding: 13px 10px; border-bottom: 1px solid var(--border); text-align: center; }
-  thead th { font-weight: 600; font-size: 13px; color: var(--muted); border-bottom: 2px solid var(--border); }
-  tbody th[scope="row"] { text-align: left; font-weight: 400; color: var(--text); }
-  .me { background: color-mix(in srgb, var(--accent) 9%, transparent); }
-  thead th.me { color: var(--accent); font-weight: 700; font-size: 15px; }
-  td.me { font-weight: 600; }
-  .y { color: #3fb24f; } .p { color: #c79033; } .n { color: var(--faint); }
-  @media (prefers-color-scheme: light) { .y { color: #1a7f37; } .p { color: #9a6700; } }
-
-  .cta { text-align: center; padding: 8px 0 64px; }
-  .cta p { color: var(--muted); margin: 0 0 24px; }
-  .cta .btn { min-width: 260px; }
-
-  footer { border-top: 1px solid var(--border); padding: 28px 0 56px; text-align: center; color: var(--faint); font-size: 13.5px; }
-  footer a { color: var(--muted); }
-  .note { font-size: 13px; color: var(--faint); max-width: 640px; margin: 16px auto 0; text-align: center; line-height: 1.5; }
-</style>
+<link rel="stylesheet" href="site.css">
+<script src="releases.js" type="module"></script>
 </head>
 <body>
 <div class="wrap">
+  <nav class="site-nav" aria-label="Main navigation"><a class="wordmark" href="#">Link</a><div><a href="#features">Features</a><a href="#releases">Downloads &amp; updates</a></div></nav>
   <header>
-    <svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">
-      <rect x="64" y="64" width="896" height="896" rx="208" fill="#1b1b1b"/>
-      <g stroke="#8a6cef" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M 360 300 L 360 700 L 700 700"/><path d="M 360 700 L 680 330"/>
-      </g>
-      <circle cx="360" cy="300" r="78" fill="#f2f2f2"/><circle cx="700" cy="700" r="78" fill="#f2f2f2"/>
-      <circle cx="680" cy="330" r="62" fill="#f2f2f2"/><circle cx="360" cy="700" r="92" fill="#8a6cef"/>
-    </svg>
-    <h1>Link</h1>
-    <p class="tagline">A private, extensible web browser. Ads and trackers blocked by default, a free built-in VPN, your choice of search engines, and Chrome extensions.</p>
-
-    <div class="downloads">
-      <a class="btn" id="primary" href="https://github.com/Alex666afk/link-browser/releases/latest">
-        <span id="primary-label">Download Link</span>
-      </a>
-      <div class="alt-links" id="alt-links">
-        <a href="https://github.com/Alex666afk/link-browser/releases/latest">All downloads</a>
-      </div>
-      <div class="version" id="version"></div>
-    </div>
+    <div class="identity"><img src="icon.png" width="44" height="44" alt=""><h1>Link</h1></div>
+    <p>A free, open-source web browser for Windows and macOS.</p>
+    <a class="btn" id="primary" href="#releases">Download Link</a>
+    <p class="version" id="latest-version">Windows &amp; macOS</p>
   </header>
-
-  <div class="showcase">
-    <div class="glow"></div>
-    <div class="window">
-      <div class="winbar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
-      <img src="screenshot.png" width="1400" height="884" alt="The Link browser interface: a sidebar, tabs, address bar and the Link start page" loading="lazy">
-    </div>
-  </div>
-
-  <section class="features">
-    <div class="feature"><h3>Blocks ads &amp; trackers</h3><p>The same filter lists as uBlock Origin, on by default. No ads, faster pages, less tracking.</p></div>
-    <div class="feature"><h3>Free built-in VPN</h3><p>Turn it on and your traffic routes through the Tor network. Nothing to install or sign up for.</p></div>
-    <div class="feature"><h3>Your search, your way</h3><p>Link Search plus 12 engines built in, and you can add your own. Switch with one click.</p></div>
-    <div class="feature"><h3>Chrome extensions</h3><p>Install from the Chrome Web Store and import the ones you already use.</p></div>
-    <div class="feature"><h3>Bring your data</h3><p>Import bookmarks, history, passwords and cookies from Chrome, Edge, Firefox, Safari and more.</p></div>
-    <div class="feature"><h3>Built-in tools</h3><p>Download videos, auto-close idle tabs, and handy answers right in the search page.</p></div>
+  <section id="features" class="feature-section anchor-target" aria-labelledby="features-title">
+    <h2 id="features-title">Features</h2>
+    <ul class="feature-list">
+      <li>Ad and tracker blocking</li>
+      <li>Cookie-banner blocking</li>
+      <li>Tor VPN</li>
+      <li>VPN exit-country selection</li>
+      <li>Custom SOCKS5 / HTTPS proxy</li>
+      <li>HTTPS upgrades</li>
+      <li>Global Privacy Control</li>
+      <li>WebRTC controls</li>
+      <li>Website permissions</li>
+      <li>Private tabs</li>
+      <li>Encrypted passwords and cookies</li>
+      <li>Link Search</li>
+      <li>12 additional search engines</li>
+      <li>Custom search engines</li>
+      <li>Search maps and weather</li>
+      <li>Calculations and unit conversions</li>
+      <li>Timers and stopwatch</li>
+      <li>Definitions and quick answers</li>
+      <li>Vertical sidebar</li>
+      <li>Bookmarks and history</li>
+      <li>Command palette</li>
+      <li>Quick switcher</li>
+      <li>Light, dark and system themes</li>
+      <li>Accent colors</li>
+      <li>Find in page and zoom</li>
+      <li>Memory saver</li>
+      <li>Automatic idle-tab closing</li>
+      <li>Chrome Web Store extensions</li>
+      <li>Unpacked extensions</li>
+      <li>Browser data imports</li>
+      <li>Bookmark, password and cookie file imports</li>
+      <li>Password manager</li>
+      <li>Video downloads</li>
+      <li>Download manager</li>
+      <li>Save web pages</li>
+      <li>Keyboard shortcuts</li>
+      <li>Update checks</li>
+    </ul>
   </section>
-
-  <section class="compare">
-    <h2>How Link compares</h2>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr><th scope="col"></th><th scope="col" class="me">Link</th><th scope="col">Chrome</th><th scope="col">Edge</th><th scope="col">Brave</th></tr>
-        </thead>
-        <tbody>
-          <tr><th scope="row">Blocks ads &amp; trackers by default</th><td class="me y">Yes</td><td class="n">No</td><td class="p">Limited</td><td class="y">Yes</td></tr>
-          <tr><th scope="row">Free built-in VPN</th><td class="me y">Yes</td><td class="n">No</td><td class="p">Limited</td><td class="n">Paid</td></tr>
-          <tr><th scope="row">Built-in video downloader</th><td class="me y">Yes</td><td class="n">No</td><td class="n">No</td><td class="n">No</td></tr>
-          <tr><th scope="row">Chrome extensions</th><td class="me y">Yes</td><td class="y">Yes</td><td class="y">Yes</td><td class="y">Yes</td></tr>
-          <tr><th scope="row">Import cookies &amp; extensions, not just bookmarks</th><td class="me y">Yes</td><td class="p">Partial</td><td class="p">Partial</td><td class="p">Partial</td></tr>
-          <tr><th scope="row">Open source</th><td class="me y">Yes</td><td class="n">No</td><td class="n">No</td><td class="y">Yes</td></tr>
-          <tr><th scope="row">No account or sign-in to use</th><td class="me y">Yes</td><td class="p">Prompted</td><td class="p">Prompted</td><td class="y">Yes</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="note">“Limited” = a basic or capped free tier · “Partial” = some data only · “Prompted” = nudged to sign in. Reflects each browser’s default, out-of-the-box behavior in 2026. Chrome, Edge and Brave are trademarks of their respective owners.</p>
+  <section class="release-section anchor-target" id="releases" aria-labelledby="releases-title">
+    <h2 id="releases-title">Downloads and version history</h2>
+    <div class="release-toolbar"><label for="release-version">Version <select id="release-version"><option>Loading versions…</option></select></label><label for="release-platform">Show downloads for <select id="release-platform"><option value="all">All platforms</option><option value="win">Windows</option><option value="mac">macOS</option></select></label></div>
+    <p id="release-status" class="release-status" role="status" aria-live="polite">Loading available downloads…</p>
+    <div id="release-content"></div>
+    <button class="secondary-button" id="release-retry" type="button" hidden>Retry loading downloads</button>
+    <noscript><p>Enable JavaScript to browse all versions, or download the current Windows installer: <a href="downloads/1.0.1/Link-Setup-1.0.1.exe" download>Link 1.0.1 for Windows</a>.</p></noscript>
+    <p class="install-help">Download the file for your operating system and open it to finish installation. Portable Windows builds run without an installer. On macOS, open the DMG and drag Link into Applications.</p>
   </section>
-
-  <section class="cta">
-    <h2>Free, private, yours.</h2>
-    <p>No ads, no account, and your data never leaves your computer.</p>
-    <a class="btn" href="https://github.com/Alex666afk/link-browser/releases/latest" id="cta-btn"><span>Download Link</span></a>
-  </section>
-
-  <footer>
-    <p><a href="https://github.com/Alex666afk/link-browser">Source on GitHub</a> · Free and open source</p>
-    <p class="note" id="install-note"></p>
-  </footer>
+  <footer><span>Link · Free and open source</span><a href="https://github.com/Alex666afk/link-browser" target="_blank" rel="noopener noreferrer">Source code <span aria-hidden="true">&#8599;</span></a></footer>
 </div>
-
-<script>
-  const REPO = "Alex666afk/link-browser";
-  const OS = (() => {
-    const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-    const ua = navigator.userAgent;
-    if (/Mac/i.test(p) || /Mac OS X/i.test(ua)) return "mac";
-    if (/Win/i.test(p) || /Windows/i.test(ua)) return "win";
-    return "other";
-  })();
-  // Apple-silicon detection is best-effort; default Mac download is Apple silicon.
-  const macArm = OS === "mac";
-
-  const SVG_WIN = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.2 4.5v6.8H3zM10.2 12v6.8L3 17.8V12zM11.4 4.3 21 3v8.3H11.4zM21 12v9l-9.6-1.3V12z"/></svg>';
-  const SVG_MAC = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.3 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .7 1.1 1.6 2.3 2.8 2.2 1.1 0 1.5-.7 2.9-.7s1.7.7 2.9.7c1.2 0 2-1.1 2.7-2.1.8-1.2 1.2-2.4 1.2-2.5-.1 0-2.3-.9-2.3-3.4zM14.2 5.8c.6-.8 1-1.8.9-2.9-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.6-1.1z"/></svg>';
-
-  function pick(assets, test) { const a = assets.find((x) => test(x.name)); return a ? a.browser_download_url : null; }
-
-  async function load() {
-    const latestPage = `https://github.com/${REPO}/releases/latest`;
-    const primary = document.getElementById("primary");
-    const label = document.getElementById("primary-label");
-    const alt = document.getElementById("alt-links");
-    const note = document.getElementById("install-note");
-    try {
-      const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } });
-      if (!r.ok) throw new Error(r.status);
-      const rel = await r.json();
-      const a = rel.assets || [];
-      const links = {
-        winSetup: pick(a, (n) => /Setup/i.test(n) && n.endsWith(".exe")),
-        winPortable: pick(a, (n) => /Portable/i.test(n) && n.endsWith(".exe")),
-        macArm: pick(a, (n) => /arm64/i.test(n) && n.endsWith(".dmg")),
-        macIntel: pick(a, (n) => /x64/i.test(n) && n.endsWith(".dmg")),
-      };
-      document.getElementById("version").textContent = rel.tag_name ? `Latest version ${rel.tag_name.replace(/^v/, "")}` : "";
-
-      const cta = document.getElementById("cta-btn");
-      const set = (href, text, icon) => { primary.href = href || latestPage; if (cta) cta.href = href || latestPage; label.innerHTML = (icon || "") + "<span>" + text + "</span>"; primary.style.gap = "10px"; };
-      const others = [];
-      if (OS === "win") {
-        set(links.winSetup, "Download for Windows", SVG_WIN);
-        if (links.winPortable) others.push(`<a href="${links.winPortable}">Portable (no install)</a>`);
-        if (links.macArm) others.push(`<a href="${links.macArm}">macOS</a>`);
-      } else if (OS === "mac") {
-        set(macArm && links.macArm ? links.macArm : links.macIntel, "Download for macOS", SVG_MAC);
-        if (links.macIntel && links.macArm) others.push(`<a href="${links.macIntel}">Intel Mac</a>`);
-        if (links.winSetup) others.push(`<a href="${links.winSetup}">Windows</a>`);
-      } else {
-        set(latestPage, "Download Link");
-      }
-      others.push(`<a href="${latestPage}">All downloads</a>`);
-      alt.innerHTML = others.join("");
-
-      note.innerHTML = OS === "mac"
-        ? "Link isn’t notarized by Apple yet, so on first launch open <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>."
-        : OS === "win"
-        ? "Windows SmartScreen may warn the app is unrecognized. Click <b>More info → Run anyway</b>."
-        : "";
-    } catch (e) {
-      // GitHub API unavailable (rate limit, etc.) — the buttons already point to the releases page.
-      document.getElementById("version").innerHTML = `See <a href="${latestPage}">all releases on GitHub</a>.`;
-    }
-  }
-  load();
-</script>
 </body>
 </html>

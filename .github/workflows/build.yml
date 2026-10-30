@@ -31,6 +31,9 @@ jobs:
         run: npx electron-builder ${{ matrix.target }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Verify macOS architecture, version, signature and shared app files
+        if: runner.os == 'macOS'
+        run: node scripts/verify-mac-bundles.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: link-${{ runner.os }}

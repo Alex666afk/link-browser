@@ -1,0 +1,108 @@
+{
+  "generatedAt": "2026-10-30T14:13:14.956Z",
+  "releases": [
+    {
+      "version": "1.0.1",
+      "publishedAt": "2026-10-30T13:26:45.157Z",
+      "channel": "Local build",
+      "notes": [
+        "Added video downloads from the page menu, with progress shown in Link.",
+        "Added automatic closing of unused tabs and passwords grouped by website.",
+        "Added built-in update checks and improved VPN exit-country consistency.",
+        "Expanded cookie imports, including cookies.txt and JSON files, and fixed import labels.",
+        "Improved VPN routing, encrypted password and cookie storage, Safari imports, tabs and sidebar behavior."
+      ],
+      "notesText": "",
+      "notesSource": "Changes since v1.0.0, summarized from the shared app commit history.",
+      "assets": [
+        {
+          "name": "Link-Setup-1.0.1.exe",
+          "path": "downloads/1.0.1/Link-Setup-1.0.1.exe",
+          "size": 123220376,
+          "sha256": "3d3015747bd6a154f84906338b180aee6974ca37223e0dd3d049f3e8c7f832bb",
+          "platform": "win",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-Portable-1.0.1.exe",
+          "path": "downloads/1.0.1/Link-Portable-1.0.1.exe",
+          "size": 107705843,
+          "sha256": "9335e071ed0d1a15d99594b012585837be2cf8686d1e4c30c184f2e2102361e9",
+          "platform": "win",
+          "arch": "x64",
+          "kind": "portable"
+        }
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "publishedAt": "2026-10-28T20:25:19Z",
+      "channel": "Published release",
+      "notes": [
+        "Initial Link release for Windows and macOS.",
+        "Sidebar browsing, private tabs, themes, bookmarks, history and downloads.",
+        "Built-in ad and tracker blocking, Tor VPN, flexible search and Chrome extension support.",
+        "Browser data imports and a local password manager."
+      ],
+      "notesText": "",
+      "notesSource": "Initial-release summary based on the v1.0.0 source tag; the published release has no separate changelog.",
+      "assets": [
+        {
+          "name": "Link-Setup-1.0.0.exe",
+          "path": "downloads/1.0.0/Link-Setup-1.0.0.exe",
+          "size": 131935799,
+          "sha256": "62841c64ad4133a5b3c27e5c922beb6534b7a186bfd902d76e35ec2d2062deab",
+          "platform": "win",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-Portable-1.0.0.exe",
+          "path": "downloads/1.0.0/Link-Portable-1.0.0.exe",
+          "size": 116688366,
+          "sha256": "5388d91fdde4c18764b473a052aeea7e61b2f4395dae4ab52a537861d4c1b47f",
+          "platform": "win",
+          "arch": "x64",
+          "kind": "portable"
+        },
+        {
+          "name": "Link-1.0.0-mac-arm64.dmg",
+          "path": "downloads/1.0.0/Link-1.0.0-mac-arm64.dmg",
+          "size": 134822583,
+          "sha256": "f6b249f624e8db8e9232e97e59050453be118d4d1a22d7a2dd98aff0d24035cd",
+          "platform": "mac",
+          "arch": "arm64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.0-mac-x64.dmg",
+          "path": "downloads/1.0.0/Link-1.0.0-mac-x64.dmg",
+          "size": 142008256,
+          "sha256": "932fd74354eda366d253cf10598b757d2c179a9bf1b333b4f5acc2bc0fd11f2f",
+          "platform": "mac",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.0-mac-arm64.zip",
+          "path": "downloads/1.0.0/Link-1.0.0-mac-arm64.zip",
+          "size": 130817914,
+          "sha256": "420b04c273eceacd34580f56cf20eec997fa4a9a0f80988ab7b7cf02dfb42ca4",
+          "platform": "mac",
+          "arch": "arm64",
+          "kind": "archive"
+        },
+        {
+          "name": "Link-1.0.0-mac-x64.zip",
+          "path": "downloads/1.0.0/Link-1.0.0-mac-x64.zip",
+          "size": 138013664,
+          "sha256": "0a46abc34341f394b91feb1e7c943603e38ff55c495163e58bb8116a25bc6760",
+          "platform": "mac",
+          "arch": "x64",
+          "kind": "archive"
+        }
+      ]
+    }
+  ]
+}
