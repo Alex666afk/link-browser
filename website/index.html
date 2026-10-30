@@ -43,14 +43,45 @@
   .alt-links a:hover { color: var(--accent); }
   .version { color: var(--faint); font-size: 13px; margin-top: 6px; }
 
-  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; padding: 56px 0; border-top: 1px solid var(--border); margin-top: 56px; }
+  .showcase { position: relative; margin: 16px 0 8px; padding: 44px 0 20px; display: flex; justify-content: center; perspective: 1800px; }
+  .glow { position: absolute; top: 4%; left: 50%; width: 130%; max-width: 980px; height: 62%; transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 55%, transparent), transparent 68%); filter: blur(70px); z-index: 0; pointer-events: none; opacity: 0.8; }
+  @media (prefers-color-scheme: light) { .glow { opacity: 0.45; } }
+  .window { position: relative; z-index: 1; width: 100%; max-width: 860px; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--border); background: #1b1b1b;
+    box-shadow: 0 40px 90px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+    transform: rotateX(7deg); transform-origin: center top; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+  .showcase:hover .window { transform: rotateX(0deg); }
+  .winbar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; background: #262626; border-bottom: 1px solid #333; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.red { background: #ff5f57; } .dot.yellow { background: #febc2e; } .dot.green { background: #28c840; }
+  .window img { display: block; width: 100%; height: auto; }
+
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; padding: 56px 0; border-top: 1px solid var(--border); margin-top: 40px; }
   @media (max-width: 560px) { .features { grid-template-columns: 1fr; } header { padding-top: 56px; } h1 { font-size: 32px; } }
   .feature h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .feature p { font-size: 14px; color: var(--muted); margin: 0; }
 
+  .compare { padding: 56px 0; border-top: 1px solid var(--border); }
+  .compare h2, .cta h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 20px; text-align: center; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
+  th, td { padding: 13px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  thead th { font-weight: 600; font-size: 13px; color: var(--muted); border-bottom: 2px solid var(--border); }
+  tbody th[scope="row"] { text-align: left; font-weight: 400; color: var(--text); }
+  .me { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+  thead th.me { color: var(--accent); font-weight: 700; font-size: 15px; }
+  td.me { font-weight: 600; }
+  .y { color: #3fb24f; } .p { color: #c79033; } .n { color: var(--faint); }
+  @media (prefers-color-scheme: light) { .y { color: #1a7f37; } .p { color: #9a6700; } }
+
+  .cta { text-align: center; padding: 8px 0 64px; }
+  .cta p { color: var(--muted); margin: 0 0 24px; }
+  .cta .btn { min-width: 260px; }
+
   footer { border-top: 1px solid var(--border); padding: 28px 0 56px; text-align: center; color: var(--faint); font-size: 13.5px; }
   footer a { color: var(--muted); }
-  .note { font-size: 13px; color: var(--faint); max-width: 560px; margin: 8px auto 0; }
+  .note { font-size: 13px; color: var(--faint); max-width: 640px; margin: 16px auto 0; text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -78,6 +109,14 @@
     </div>
   </header>
 
+  <div class="showcase">
+    <div class="glow"></div>
+    <div class="window">
+      <div class="winbar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+      <img src="screenshot.png" width="1400" height="884" alt="The Link browser interface: a sidebar, tabs, address bar and the Link start page" loading="lazy">
+    </div>
+  </div>
+
   <section class="features">
     <div class="feature"><h3>Blocks ads &amp; trackers</h3><p>The same filter lists as uBlock Origin, on by default. No ads, faster pages, less tracking.</p></div>
     <div class="feature"><h3>Free built-in VPN</h3><p>Turn it on and your traffic routes through the Tor network. Nothing to install or sign up for.</p></div>
@@ -85,6 +124,33 @@
     <div class="feature"><h3>Chrome extensions</h3><p>Install from the Chrome Web Store and import the ones you already use.</p></div>
     <div class="feature"><h3>Bring your data</h3><p>Import bookmarks, history, passwords and cookies from Chrome, Edge, Firefox, Safari and more.</p></div>
     <div class="feature"><h3>Built-in tools</h3><p>Download videos, auto-close idle tabs, and handy answers right in the search page.</p></div>
+  </section>
+
+  <section class="compare">
+    <h2>How Link compares</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th scope="col"></th><th scope="col" class="me">Link</th><th scope="col">Chrome</th><th scope="col">Edge</th><th scope="col">Brave</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Blocks ads &amp; trackers by default</th><td class="me y">Yes</td><td class="n">No</td><td class="p">Limited</td><td class="y">Yes</td></tr>
+          <tr><th scope="row">Free built-in VPN</th><td class="me y">Yes</td><td class="n">No</td><td class="p">Limited</td><td class="n">Paid</td></tr>
+          <tr><th scope="row">Built-in video downloader</th><td class="me y">Yes</td><td class="n">No</td><td class="n">No</td><td class="n">No</td></tr>
+          <tr><th scope="row">Chrome extensions</th><td class="me y">Yes</td><td class="y">Yes</td><td class="y">Yes</td><td class="y">Yes</td></tr>
+          <tr><th scope="row">Import cookies &amp; extensions, not just bookmarks</th><td class="me y">Yes</td><td class="p">Partial</td><td class="p">Partial</td><td class="p">Partial</td></tr>
+          <tr><th scope="row">Open source</th><td class="me y">Yes</td><td class="n">No</td><td class="n">No</td><td class="y">Yes</td></tr>
+          <tr><th scope="row">No account or sign-in to use</th><td class="me y">Yes</td><td class="p">Prompted</td><td class="p">Prompted</td><td class="y">Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">“Limited” = a basic or capped free tier · “Partial” = some data only · “Prompted” = nudged to sign in. Reflects each browser’s default, out-of-the-box behavior in 2026. Chrome, Edge and Brave are trademarks of their respective owners.</p>
+  </section>
+
+  <section class="cta">
+    <h2>Free, private, yours.</h2>
+    <p>No ads, no account, and your data never leaves your computer.</p>
+    <a class="btn" href="https://github.com/Alex666afk/link-browser/releases/latest" id="cta-btn"><span>Download Link</span></a>
   </section>
 
   <footer>
@@ -129,7 +195,8 @@
       };
       document.getElementById("version").textContent = rel.tag_name ? `Latest version ${rel.tag_name.replace(/^v/, "")}` : "";
 
-      const set = (href, text, icon) => { primary.href = href || latestPage; label.innerHTML = (icon || "") + "<span>" + text + "</span>"; primary.style.gap = "10px"; };
+      const cta = document.getElementById("cta-btn");
+      const set = (href, text, icon) => { primary.href = href || latestPage; if (cta) cta.href = href || latestPage; label.innerHTML = (icon || "") + "<span>" + text + "</span>"; primary.style.gap = "10px"; };
       const others = [];
       if (OS === "win") {
         set(links.winSetup, "Download for Windows", SVG_WIN);
