@@ -53,6 +53,8 @@ const PANES = {
       settingItem('Homepage', 'Page that opens in new tabs and with Alt+Home. Leave empty for the Link start page.', homeInput),
       settingItem('Restore tabs on startup', 'Reopen the tabs you had open last time (private tabs are never restored).', toggle(s.restoreTabs, (v) => setSettings({ restoreTabs: v }))),
       settingItem('Memory Saver', 'Tabs you haven’t opened for 15 minutes free their memory, and reload when you go back to them. Tabs playing sound and private tabs stay awake.', toggle(s.memorySaver, (v) => setSettings({ memorySaver: v }))),
+      settingItem('Close unused tabs', 'Automatically close tabs you haven’t opened for a while. The current tab, tabs playing sound and private tabs are always kept.',
+        dropdown([['0', 'Never'], ['60', 'After 1 hour'], ['360', 'After 6 hours'], ['720', 'After 12 hours'], ['1440', 'After 1 day'], ['4320', 'After 3 days']], String(s.closeIdleAfter || 0), (v) => setSettings({ closeIdleAfter: +v }))),
       settingItem('Search suggestions', 'Show live suggestions from your search engine while you type in the address bar.', toggle(s.suggestions, (v) => setSettings({ suggestions: v }))),
       settingItem('Default browser', 'Open web links from other apps in Link.', btn('Make Link my default browser', async () => {
         await L.makeDefaultBrowser();
@@ -262,38 +264,59 @@ const PANES = {
   // ----------------------------------------------------------
   async passwords(el) {
     const list = await L.passwords.list();
+    const siteOf = (url) => { try { return new URL(/^https?:/.test(url) ? url : 'https://' + url).hostname.replace(/^www\./, ''); } catch { return url || '(other)'; } };
     let query = '';
-    const search = h('input', { class: 'text', placeholder: 'Search passwords…', style: { width: '100%' } });
-    const cards = h('div', { class: 'card-list' });
+    const search = h('input', { class: 'text', placeholder: 'Search by site, username…', style: { width: '100%' } });
+    const summary = h('div', { class: 'setting-item-description', style: { margin: '0 0 10px' } });
+    const groupsEl = h('div', { class: 'pw-groups' });
+
+    const accountRow = (p) => {
+      const secret = h('span', { class: 'pw-secret' }, '••••••••••');
+      let revealed = false;
+      return h('div', { class: 'pw-account' },
+        h('div', { class: 'pw-account-info' },
+          h('div', { class: 'pw-user' }, p.username || h('span', { class: 'pw-muted' }, '(no username)')),
+          secret),
+        h('div', { class: 'card-actions' },
+          h('button', { class: 'clickable-icon', title: 'Show password', onclick: async (e) => {
+            revealed = !revealed;
+            secret.textContent = revealed ? await L.passwords.reveal(p.id) : '••••••••••';
+            secret.classList.toggle('is-revealed', revealed);
+            setIcon(e.currentTarget, revealed ? 'eye-off' : 'eye', 15);
+          } }, icon('eye', 15)),
+          h('button', { class: 'clickable-icon', title: 'Copy username', disabled: !p.username, onclick: () => { navigator.clipboard.writeText(p.username); notice('Username copied'); } }, icon('copy', 15)),
+          h('button', { class: 'clickable-icon', title: 'Copy password', onclick: async () => { navigator.clipboard.writeText(await L.passwords.reveal(p.id)); notice('Password copied'); } }, icon('key', 15)),
+          h('button', { class: 'clickable-icon', title: 'Delete', onclick: async () => {
+            if (await confirmDialog('Delete password', `Delete the saved password for ${p.username || siteOf(p.url)}?`, 'Delete')) { await L.passwords.remove(p.id); rerender(el, 'passwords')(); }
+          } }, icon('trash', 15))));
+    };
+
     const render = () => {
-      const q = query.toLowerCase();
-      const shown = list.filter((p) => !q || (p.name + p.url + p.username).toLowerCase().includes(q));
-      cards.replaceChildren(...(shown.length ? shown.map((p) => {
-        const secret = h('span', {}, '••••••••');
-        let revealed = false;
-        return h('div', { class: 'card' },
-          h('div', { class: 'card-icon' }, faviconEl(p.url, 'key', 18)),
-          h('div', { class: 'card-body' },
-            h('div', { class: 'card-title' }, p.name),
-            h('div', { class: 'card-sub' }, `${p.username || '(no username)'} · `, secret)),
-          h('div', { class: 'card-actions' },
-            h('button', { class: 'clickable-icon', title: 'Show password', onclick: async (e) => {
-              revealed = !revealed;
-              secret.textContent = revealed ? await L.passwords.reveal(p.id) : '••••••••';
-              setIcon(e.currentTarget, revealed ? 'eye-off' : 'eye', 15);
-            } }, icon('eye', 15)),
-            h('button', { class: 'clickable-icon', title: 'Copy username', onclick: () => { navigator.clipboard.writeText(p.username); notice('Username copied'); } }, icon('copy', 15)),
-            h('button', { class: 'clickable-icon', title: 'Copy password', onclick: async () => { navigator.clipboard.writeText(await L.passwords.reveal(p.id)); notice('Password copied'); } }, icon('key', 15)),
-            h('button', { class: 'clickable-icon', title: 'Delete', onclick: async () => {
-              if (await confirmDialog('Delete password', `Delete the saved password for ${p.username || p.name}?`, 'Delete')) { await L.passwords.remove(p.id); rerender(el, 'passwords')(); }
-            } }, icon('trash', 15))));
-      }) : [h('div', { class: 'empty-state' }, list.length ? 'No matches.' : 'No saved passwords. Import them from another browser below.')]));
+      const q = query.toLowerCase().trim();
+      const shown = list.filter((p) => !q || (siteOf(p.url) + ' ' + (p.name || '') + ' ' + (p.username || '')).toLowerCase().includes(q));
+      const groups = new Map();
+      for (const p of shown) {
+        const site = siteOf(p.url);
+        if (!groups.has(site)) groups.set(site, []);
+        groups.get(site).push(p);
+      }
+      const sites = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+      summary.textContent = list.length ? `${list.length} password${list.length === 1 ? '' : 's'} across ${new Set(list.map((p) => siteOf(p.url))).size} site${new Set(list.map((p) => siteOf(p.url))).size === 1 ? '' : 's'}.` : '';
+      groupsEl.replaceChildren(...(sites.length ? sites.map((site) => {
+        const accounts = groups.get(site).sort((a, b) => (a.username || '').localeCompare(b.username || ''));
+        return h('div', { class: 'pw-group' },
+          h('div', { class: 'pw-group-head' },
+            h('div', { class: 'card-icon', style: { width: '28px', height: '28px' } }, faviconEl('https://' + site, 'key', 16)),
+            h('div', { class: 'pw-group-title' }, site),
+            accounts.length > 1 ? h('span', { class: 'pill mod-muted' }, `${accounts.length} accounts`) : null),
+          h('div', { class: 'pw-accounts' }, accounts.map(accountRow)));
+      }) : [h('div', { class: 'empty-state' }, list.length ? 'No matches.' : 'No saved passwords yet. Add one, or import from another browser below.')]));
     };
     search.addEventListener('input', () => { query = search.value; render(); });
     el.append(
       h('h2', {}, 'Passwords'),
       h('p', { class: 'setting-intro' }, 'Passwords are encrypted with your operating system’s secure storage. When a page has a saved login, a key icon appears next to the address bar — click it to fill the form.'),
-      h('div', { style: { display: 'flex', gap: '8px', marginBottom: '8px' } },
+      h('div', { style: { display: 'flex', gap: '8px', marginBottom: '10px' } },
         search,
         btn('Import CSV…', async () => {
           try {
@@ -302,7 +325,8 @@ const PANES = {
           } catch (err) { notice(cleanError(err), { type: 'error', timeout: 8000 }); }
         }),
         btn('Add', () => addPassword(), 'mod-cta')),
-      cards,
+      summary,
+      groupsEl,
     );
     render();
 

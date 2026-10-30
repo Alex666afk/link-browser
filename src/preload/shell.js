@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('link', {
   makeDefaultBrowser: invoke('app:default-browser'),
   toggleDevTools: invoke('devtools:toggle'),
   update: { check: invoke('update:check'), state: invoke('update:state'), install: invoke('update:install') },
+  downloadVideo: invoke('media:download'),
   on: {
     shortcut: on('shortcut'),
     openTab: on('open-tab'),
@@ -56,5 +57,6 @@ contextBridge.exposeInMainWorld('link', {
     vpnBlocked: on('vpn-blocked'),
     vpnMisplaced: on('vpn-misplaced'),
     updateStatus: on('update-status'),
+    mediaProgress: on('media-progress'),
   },
 });

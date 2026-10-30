@@ -201,6 +201,20 @@ function sleepIdleTabs() {
   if (slept) renderTabs();
 }
 
+// Closes tabs you haven't touched for a while (Settings -> General). The active, audible and
+// private tabs are kept, and at least one tab always stays open.
+function closeIdleTabs() {
+  const mins = state.settings.closeIdleAfter;
+  if (!mins) return;
+  const cutoff = Date.now() - mins * 60000;
+  for (const tab of [...state.tabs]) {
+    if (state.tabs.length <= 1) break;
+    if (tab.id === state.activeId || tab.private || tab.audible || tab.loading) continue;
+    if (isNewTab(tab.url) || tab.lastActive > cutoff) continue;
+    closeTab(tab.id);
+  }
+}
+
 // Opens every tab that's open in Safari, after the ones already here. They load when you open them.
 async function bringSafariTabs() {
   let tabs;
@@ -977,6 +991,37 @@ function onVpnMisplaced({ id, name, place, country, query, retryUrl }) {
   { timeout: 20000 });
 }
 
+// Video download: hand the current page to the downloader and show live progress.
+const videoProgress = new Map(); // download id -> { notice, bar, label }
+function downloadVideo() {
+  const tab = activeTab();
+  if (!tab || isInternal(tab.url)) return notice('Open a web page with a video first.');
+  const bar = h('div', { class: 'progress' }, h('div'));
+  const label = h('div', {}, 'Preparing to download video…');
+  const el = notice(h('div', { class: 'notice-body' }, label, bar), { timeout: 0 });
+  L.downloadVideo(tab.url).then((r) => {
+    videoProgress.delete(r.id);
+    el.remove();
+    if (r.ok) {
+      const done = notice(h('div', { class: 'notice-body' },
+        h('div', {}, `Saved ${r.title || 'video'}`),
+        h('div', { class: 'notice-actions' }, btn('Show in folder', () => { L.downloads.show(r.path || state.downloadsDir); done.remove(); }))),
+      { type: 'success', timeout: 10000 });
+    } else {
+      notice(r.error || 'The video could not be downloaded.', { type: 'error', timeout: 9000 });
+    }
+  });
+  // The id comes back with the result, but progress events arrive first; match on the latest notice.
+  videoProgress.set('pending', { label, bar });
+}
+function onMediaProgress({ id, phase, percent }) {
+  const entry = videoProgress.get(id) || videoProgress.get('pending');
+  if (!entry) return;
+  if (videoProgress.has('pending')) { videoProgress.delete('pending'); videoProgress.set(id, entry); }
+  entry.label.textContent = phase === 'setup' ? `Setting up the video downloader… ${percent}%` : `Downloading video… ${percent}%`;
+  entry.bar.firstChild.style.width = `${percent}%`;
+}
+
 // App updates: refresh the About pane live, and offer a restart once an update is downloaded.
 let updateReadyShown = '';
 function onUpdateStatus(s) {
@@ -1119,6 +1164,7 @@ function mainMenu(anchor) {
     { title: 'Find in page', icon: 'search', hint: 'Ctrl+F', onClick: openFind },
     { title: 'Zoom in', icon: 'zoom-in', hint: 'Ctrl+=', onClick: () => zoom(1) },
     { title: 'Zoom out', icon: 'zoom-out', hint: 'Ctrl+-', onClick: () => zoom(-1) },
+    { title: 'Download video on this page', icon: 'download', disabled: !tab || isInternal(tab.url), onClick: () => runAction('download-video') },
     { title: 'Print…', icon: 'printer', onClick: () => tab?.ready && tab.wv.print() },
     { title: 'Save page as…', icon: 'save', hint: 'Ctrl+S', onClick: () => runAction('save-page') },
     '-',
@@ -1241,6 +1287,7 @@ function runAction(action, anchor) {
     case 'mute-tab': return tab && toggleMute(tab);
     case 'print': return ready && tab.wv.print();
     case 'save-page': return ready && L.savePage(tab.wcId);
+    case 'download-video': return downloadVideo();
     case 'view-source': return tab && !isInternal(tab.url) && createTab({ url: 'view-source:' + tab.url });
     case 'devtools': return ready && L.toggleDevTools(tab.wcId);
     case 'protection': return openShieldPopover(anchor);
@@ -1357,6 +1404,7 @@ async function boot() {
   L.on.vpnBlocked(onVpnBlocked);
   L.on.vpnMisplaced(onVpnMisplaced);
   L.on.updateStatus(onUpdateStatus);
+  L.on.mediaProgress(onMediaProgress);
   state.vpnStatus = s.vpnStatus;
   L.on.blocked(({ id, count, total }) => {
     state.totalBlocked = total;
@@ -1383,6 +1431,7 @@ async function boot() {
 
   renderSidebar();
   setInterval(sleepIdleTabs, 60000);
+  setInterval(closeIdleTabs, 60000);
   // A mouse wheel scrolls the tab strip sideways (trackpads already swipe it).
   $('tabs').addEventListener('wheel', (e) => {
     if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;

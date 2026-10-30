@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   sidebarView: 'bookmarks',
   restoreTabs: true,
   memorySaver: true,
+  closeIdleAfter: 0, // minutes of inactivity before a tab auto-closes; 0 = never
   adblock: { enabled: true, level: 'adsAndTracking' },
   httpsOnly: true,
   gpc: true,

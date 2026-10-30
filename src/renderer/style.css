@@ -503,3 +503,19 @@ input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid var
 .engine-choice img { width: 24px; height: 24px; }
 body.is-resizing webview, body.is-dragging-tab webview { pointer-events: none; }
 body.is-resizing { cursor: col-resize; }
+
+/* ===== Passwords, grouped by site ===== */
+.pw-groups { display: flex; flex-direction: column; gap: 10px; }
+.pw-group { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); overflow: hidden; }
+.pw-group-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--background-secondary); border-bottom: 1px solid var(--background-modifier-border); }
+.pw-group-title { font-weight: 600; font-size: 13.5px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-accounts { display: flex; flex-direction: column; }
+.pw-account { display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+.pw-account + .pw-account { border-top: 1px solid var(--background-modifier-border); }
+.pw-account-info { flex: 1; min-width: 0; }
+.pw-user { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-muted { color: var(--text-faint); }
+.pw-secret { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-faint); letter-spacing: 1px; }
+.pw-secret.is-revealed { color: var(--text-muted); letter-spacing: 0; user-select: all; }
+.notice-body .progress { height: 4px; border-radius: 4px; background: var(--background-modifier-border); overflow: hidden; margin-top: 2px; }
+.notice-body .progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }

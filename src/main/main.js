@@ -14,6 +14,7 @@ const passwords = require('./passwords');
 const linkSearch = require('./linkSearch');
 const answers = require('./answers');
 const updater = require('./updater');
+const media = require('./media');
 
 const ROOT = path.join(__dirname, '..');
 const ASSETS = path.join(ROOT, '..', 'assets');
@@ -357,19 +358,23 @@ function setupGuest(contents) {
         { type: 'separator' },
       );
     }
+    if ((p.mediaType === 'video' || p.mediaType === 'audio') && /^https?:/.test(contents.getURL())) {
+      items.push({ label: 'Download video on this page', click: () => send('shortcut', 'download-video') }, { type: 'separator' });
+    }
     if (!p.linkURL && !p.isEditable && !p.selectionText) {
       items.push(
         { label: 'Back', enabled: contents.navigationHistory.canGoBack(), click: () => contents.navigationHistory.goBack() },
         { label: 'Forward', enabled: contents.navigationHistory.canGoForward(), click: () => contents.navigationHistory.goForward() },
         { label: 'Reload', click: () => contents.reload() },
         { type: 'separator' },
+        /^https?:/.test(contents.getURL()) ? { label: 'Download video on this page', click: () => send('shortcut', 'download-video') } : null,
         { label: 'Save page as…', click: () => send('shortcut', 'save-page') },
         { label: 'Bookmark this page', click: () => send('shortcut', 'bookmark') },
         { type: 'separator' },
       );
     }
     items.push({ label: 'Inspect', click: () => { openDevTools(contents); contents.inspectElement(p.x, p.y); } });
-    Menu.buildFromTemplate(items).popup({ window: win });
+    Menu.buildFromTemplate(items.filter(Boolean)).popup({ window: win });
   });
 }
 
@@ -600,6 +605,17 @@ function registerIpc() {
   h('update:check', () => updater.check());
   h('update:state', () => updater.getState());
   h('update:install', () => updater.install());
+
+  let downloadId = 0;
+  h('media:download', async (pageUrl) => {
+    const id = ++downloadId;
+    try {
+      const r = await media.download(pageUrl, (s) => send('media-progress', { id, ...s }));
+      return { ok: true, id, ...r };
+    } catch (err) {
+      return { ok: false, id, error: err.message };
+    }
+  });
 }
 
 // URLs passed on the command line (e.g. when Link is the default browser).
