@@ -82,7 +82,7 @@ for (const release of versions.values()) {
     if (original && original.size !== info.size) throw new Error(`Incomplete download: ${name}`);
     if (original?.digest?.startsWith('sha256:') && original.digest !== 'sha256:' + sha256) throw new Error(`Checksum mismatch: ${name}`);
     const platform = name.endsWith('.exe') ? 'win' : /mac/i.test(name) || name.endsWith('.dmg') ? 'mac' : /linux/i.test(name) || name.endsWith('.deb') || /\.AppImage$/i.test(name) ? 'linux' : 'other';
-    const arch = /arm64/i.test(name) ? 'arm64' : /x64/i.test(name) || platform === 'win' ? 'x64' : '';
+    const arch = /arm64|aarch64/i.test(name) ? 'arm64' : /x64|x86_64|amd64/i.test(name) || platform === 'win' ? 'x64' : '';
     const kind = /portable|\.AppImage$/i.test(name) ? 'portable' : name.endsWith('.zip') ? 'archive' : 'installer';
     assets.push({ name, path: `downloads/${release.version}/${encodeURIComponent(name)}`, size: info.size, sha256, platform, arch, kind });
   }

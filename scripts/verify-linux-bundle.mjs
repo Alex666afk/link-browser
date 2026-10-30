@@ -20,7 +20,11 @@ async function verify(directory) {
 }
 await verify(path.join(source, 'src'));
 await verify(path.join(source, 'assets'));
-const deb = path.join(source, 'dist', `Link-${pkg.version}-linux-x64.deb`);
+// electron-builder names the package with Debian's arch convention (e.g. Link-1.0.0-linux-amd64.deb),
+// so find it rather than assume a fixed name.
+const debName = (await readdir(path.join(source, 'dist'))).find((f) => f.endsWith('.deb'));
+assert(debName, 'No .deb package was produced in dist/');
+const deb = path.join(source, 'dist', debName);
 const version = execFileSync('dpkg-deb', ['--field', deb, 'Version'], { encoding: 'utf8' }).trim();
 assert.equal(version, pkg.version);
 const architecture = execFileSync('dpkg-deb', ['--field', deb, 'Architecture'], { encoding: 'utf8' }).trim();
