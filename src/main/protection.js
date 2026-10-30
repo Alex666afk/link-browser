@@ -123,7 +123,16 @@ async function applyProxy() {
   try {
     await tor.start((step, percent) => onVpnStatus({ state: 'connecting', step, percent }), country);
     await Promise.all(sessions.map((ses) => ses.closeAllConnections()));
-    setVpnLocation(await locateVpn());
+    let loc = await locateVpn();
+    // Automatic mode: pin to the country we landed in so every site reports the same one.
+    if (!country && loc?.countryCode) {
+      try {
+        await tor.pinExitCountry(loc.countryCode);
+        await Promise.all(sessions.map((ses) => ses.closeAllConnections()));
+        loc = (await locateVpn()) || loc;
+      } catch {}
+    }
+    setVpnLocation(loc);
     onVpnStatus({ state: 'connected' });
   } catch (err) {
     onVpnStatus({ state: 'error', message: err.message });
@@ -134,7 +143,16 @@ async function applyProxy() {
 async function switchExit() {
   await tor.newExit(vpnLocation?.ip);
   await Promise.all(sessions.map((ses) => ses.closeAllConnections()));
-  vpnLocation = await locateVpn().catch(() => null);
+  let loc = await locateVpn().catch(() => null);
+  // Re-pin to wherever we landed, so after a switch every site again agrees on the country.
+  if (!store.getSettings().vpn.country && loc?.countryCode) {
+    try {
+      await tor.pinExitCountry(loc.countryCode);
+      await Promise.all(sessions.map((ses) => ses.closeAllConnections()));
+      loc = (await locateVpn()) || loc;
+    } catch {}
+  }
+  vpnLocation = loc;
   return vpnLocation;
 }
 const canSwitchExit = () => {

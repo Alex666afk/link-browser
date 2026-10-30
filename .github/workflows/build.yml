@@ -38,7 +38,11 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
+            dist/*.yml
+            dist/*.blockmap
           if-no-files-found: error
+      # latest.yml / latest-mac.yml and the .blockmap files are what the in-app updater reads to
+      # discover and download a new version, so they must be attached to the release too.
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -47,3 +51,5 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
+            dist/*.yml
+            dist/*.blockmap

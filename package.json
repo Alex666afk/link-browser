@@ -1,7 +1,7 @@
 {
   "name": "link-browser",
   "productName": "Link",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Link — a private, extensible web browser with an Obsidian-style interface",
   "author": "Link",
   "main": "src/main/main.js",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.3",
     "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.11",
     "sql.js": "^1.15.2"
   },
   "devDependencies": {
@@ -27,6 +28,11 @@
     "productName": "Link",
     "directories": {
       "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Alex666afk",
+      "repo": "link-browser"
     },
     "files": [
       "src/**/*",

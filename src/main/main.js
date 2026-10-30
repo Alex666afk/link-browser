@@ -13,6 +13,7 @@ const importer = require('./importer');
 const passwords = require('./passwords');
 const linkSearch = require('./linkSearch');
 const answers = require('./answers');
+const updater = require('./updater');
 
 const ROOT = path.join(__dirname, '..');
 const ASSETS = path.join(ROOT, '..', 'assets');
@@ -595,6 +596,10 @@ function registerIpc() {
     app.setAsDefaultProtocolClient('https');
     if (process.platform === 'win32') shell.openExternal('ms-settings:defaultapps');
   });
+
+  h('update:check', () => updater.check());
+  h('update:state', () => updater.getState());
+  h('update:install', () => updater.install());
 }
 
 // URLs passed on the command line (e.g. when Link is the default browser).
@@ -678,6 +683,8 @@ app.whenReady().then(async () => {
     ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }])
     : null);
   createWindow();
+  updater.init((channel, data) => send(channel, data));
+  updater.startBackgroundChecks();
   const initial = [...urlsFrom(process.argv), ...pendingUrls];
   if (initial.length) win.webContents.once('did-finish-load', () => initial.forEach((url) => send('open-tab', { url })));
 });

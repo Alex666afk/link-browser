@@ -13,7 +13,8 @@ const PLATFORMS = { win32: { x64: 'windows-x86_64', ia32: 'windows-i686' }, darw
 let proc = null;
 let ready = null; // promise while starting
 let progress = 0;
-let currentCountry = ''; // two-letter exit country, '' = any
+let currentCountry = ''; // the exit country the user chose, '' = automatic (launch arg)
+let pinnedCountry = ''; // in automatic mode, the country we pin the exit to so every site agrees
 
 const portFree = (p) => new Promise((resolve) => {
   const srv = require('net').createServer();
@@ -147,6 +148,7 @@ function launch(onProgress, country) {
       ...(country ? ['--ExitNodes', `{${country}}`, '--StrictNodes', '1'] : []),
     ];
     currentCountry = country;
+    pinnedCountry = '';
     avoided.clear(); // a new Tor starts without them
     const child = spawn(bin, args, { windowsHide: true, cwd: path.dirname(bin) });
     proc = child;
@@ -189,17 +191,39 @@ function control(command) {
   });
 }
 
+// In automatic mode, Tor can leave through any country and a different one per site, so Link's own
+// IP check and the sites you visit can disagree. Pinning the exit to one country keeps them in step.
+// (When you chose a country, it's already pinned at launch, so this is a no-op.)
+async function pinExitCountry(cc) {
+  if (!proc || currentCountry || !cc) return;
+  cc = String(cc).toLowerCase();
+  if (pinnedCountry === cc) return;
+  await control(`SETCONF ExitNodes="{${cc}}" StrictNodes=1`);
+  pinnedCountry = cc;
+  lastNewExit = Date.now();
+  await control('SIGNAL NEWNYM'); // drop old circuits so new connections use the pinned country
+}
+async function clearExitPin() {
+  if (!proc || !pinnedCountry) return;
+  await control('RESETCONF ExitNodes\r\nRESETCONF StrictNodes');
+  pinnedCountry = '';
+}
+
 // Switches new connections to a different exit (Tor's "new identity"). With no country chosen,
 // the exit being left (and its neighbours, which sites tend to treat alike) is avoided from then
-// on; with a country chosen there may be too few exits to skip any.
+// on, and the country pin is lifted so the switch can land somewhere new; with a country chosen
+// there may be too few exits to skip any.
 let lastNewExit = 0;
 const avoided = new Set(); // "a.b.c.0/24" blocks, until Tor restarts
 async function newExit(avoidIp) {
   if (!proc) throw new Error('The VPN is not running.');
-  if (!currentCountry && /^\d+\.\d+\.\d+\.\d+$/.test(avoidIp || '')) {
-    avoided.add(avoidIp.replace(/\.\d+$/, '.0/24'));
-    if (avoided.size > 64) avoided.delete(avoided.values().next().value);
-    await control(`SETCONF ExcludeExitNodes="${[...avoided].join(',')}"`);
+  if (!currentCountry) {
+    await clearExitPin().catch(() => {});
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(avoidIp || '')) {
+      avoided.add(avoidIp.replace(/\.\d+$/, '.0/24'));
+      if (avoided.size > 64) avoided.delete(avoided.values().next().value);
+      await control(`SETCONF ExcludeExitNodes="${[...avoided].join(',')}"`);
+    }
   }
   // Tor only honours this once every 10 seconds; wait out the rest rather than be ignored.
   const wait = lastNewExit + 10500 - Date.now();
@@ -230,4 +254,4 @@ function stop() {
 }
 
 // getPort is where pages send their traffic: the relay, which passes it on to Tor.
-module.exports = { start, stop, preparePort, newExit, getPort: () => relayPort || port, isRunning };
+module.exports = { start, stop, preparePort, newExit, pinExitCountry, getPort: () => relayPort || port, isRunning };

@@ -414,11 +414,40 @@ const PANES = {
         appLogo(56),
         h('div', {}, h('h2', {}, 'Link'), h('div', { class: 'setting-item-description' }, `Version ${state.versions.app} · Chromium ${state.versions.chrome} · Electron ${state.versions.electron}`))),
       h('p', { class: 'setting-intro' }, 'A private, extensible browser. Built-in ad & tracker blocking, VPN routing, your choice of search engines, Chrome extensions and one-click import from any browser.'),
+    );
+
+    // Updates
+    const statusText = h('span', { class: 'setting-item-description' }, 'Link keeps itself up to date automatically.');
+    const describe = (s) => ({
+      idle: 'Link keeps itself up to date automatically.',
+      checking: 'Checking for updates…',
+      'up-to-date': `You’re on the latest version (${state.versions.app}).`,
+      downloading: `Downloading update ${s.version ? 'v' + s.version : ''}… ${s.progress || 0}%`,
+      ready: `Update ${s.version ? 'v' + s.version : ''} is ready. Restart Link to finish.`,
+      error: `Couldn’t check for updates: ${s.error || 'unknown error'}`,
+      unsupported: 'Automatic updates work in the installed app. Download new versions from GitHub Releases.',
+    })[s.status] || statusText.textContent;
+    const primary = h('span');
+    const render = (s) => {
+      statusText.textContent = describe(s);
+      primary.replaceChildren(s.status === 'ready'
+        ? btn('Restart & update', () => L.update.install(), 'mod-cta')
+        : btn(s.status === 'checking' || s.status === 'downloading' ? 'Checking…' : 'Check for updates', async () => { render({ status: 'checking' }); render(await L.update.check()); }));
+    };
+    updateSettingsListeners.length = 0; // only the current About view listens
+    L.update.state().then(render);
+    updateSettingsListeners.push(render);
+    el.append(settingItem('Updates', statusText, primary));
+
+    el.append(
       settingItem('Ad-blocking engine', '@ghostery/adblocker with EasyList, EasyPrivacy, uBlock Origin and Peter Lowe’s lists.'),
       settingItem('Data folder', 'Your settings, bookmarks and history are stored only on this computer.'),
     );
   },
 };
+
+// About pane re-renders live while it's open as update status arrives.
+const updateSettingsListeners = [];
 
 function importCard(src, compact = false) {
   const types = src.kind === 'safari'

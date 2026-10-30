@@ -977,6 +977,21 @@ function onVpnMisplaced({ id, name, place, country, query, retryUrl }) {
   { timeout: 20000 });
 }
 
+// App updates: refresh the About pane live, and offer a restart once an update is downloaded.
+let updateReadyShown = '';
+function onUpdateStatus(s) {
+  try { for (const fn of updateSettingsListeners) fn(s); } catch {}
+  if (s.status === 'ready' && s.version && updateReadyShown !== s.version) {
+    updateReadyShown = s.version;
+    const el = notice(h('div', { class: 'notice-body' },
+      h('div', {}, `Link ${s.version} is ready to install.`),
+      h('div', { class: 'notice-actions' },
+        btn('Restart & update', () => L.update.install(), 'mod-cta'),
+        btn('Later', () => el.remove()))),
+    { type: 'success', timeout: 0 });
+  }
+}
+
 async function onVpnStatus(status) {
   const prev = state.vpnStatus.state;
   state.vpnStatus = status;
@@ -1341,6 +1356,7 @@ async function boot() {
   L.on.guestMousedown(() => { hideSuggestions(); closeFloating(); });
   L.on.vpnBlocked(onVpnBlocked);
   L.on.vpnMisplaced(onVpnMisplaced);
+  L.on.updateStatus(onUpdateStatus);
   state.vpnStatus = s.vpnStatus;
   L.on.blocked(({ id, count, total }) => {
     state.totalBlocked = total;
