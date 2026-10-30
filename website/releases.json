@@ -1,16 +1,18 @@
 {
-  "generatedAt": "2026-10-30T14:13:14.956Z",
+  "generatedAt": "2026-10-30T14:44:22.986Z",
   "releases": [
     {
       "version": "1.0.1",
-      "publishedAt": "2026-10-30T13:26:45.157Z",
-      "channel": "Local build",
+      "publishedAt": "2026-10-30T14:13:41Z",
+      "channel": "Published release",
       "notes": [
         "Added video downloads from the page menu, with progress shown in Link.",
         "Added automatic closing of unused tabs and passwords grouped by website.",
         "Added built-in update checks and improved VPN exit-country consistency.",
         "Expanded cookie imports, including cookies.txt and JSON files, and fixed import labels.",
-        "Improved VPN routing, encrypted password and cookie storage, Safari imports, tabs and sidebar behavior."
+        "Improved VPN routing, encrypted password and cookie storage, Safari imports, tabs and sidebar behavior.",
+        "Current shared app updates packaged for Apple silicon and Intel Macs, with the existing Mac interface retained.",
+        "Linux x64 AppImage and Debian packages built from this version's source."
       ],
       "notesText": "",
       "notesSource": "Changes since v1.0.0, summarized from the shared app commit history.",
@@ -18,8 +20,8 @@
         {
           "name": "Link-Setup-1.0.1.exe",
           "path": "downloads/1.0.1/Link-Setup-1.0.1.exe",
-          "size": 123220376,
-          "sha256": "3d3015747bd6a154f84906338b180aee6974ca37223e0dd3d049f3e8c7f832bb",
+          "size": 122253917,
+          "sha256": "b1ef0cb2417ff97f29b0e17e62688d1155c015d8a5260c3cd7b17e1a16a7bd96",
           "platform": "win",
           "arch": "x64",
           "kind": "installer"
@@ -27,9 +29,63 @@
         {
           "name": "Link-Portable-1.0.1.exe",
           "path": "downloads/1.0.1/Link-Portable-1.0.1.exe",
-          "size": 107705843,
-          "sha256": "9335e071ed0d1a15d99594b012585837be2cf8686d1e4c30c184f2e2102361e9",
+          "size": 107705902,
+          "sha256": "e569348d408264dd7e4b8186bd99bfec40365b6fe98f3b7aaf67b89eddd30bfd",
           "platform": "win",
+          "arch": "x64",
+          "kind": "portable"
+        },
+        {
+          "name": "Link-1.0.1-mac-arm64.dmg",
+          "path": "downloads/1.0.1/Link-1.0.1-mac-arm64.dmg",
+          "size": 135718026,
+          "sha256": "b1769ffd17e08eceaa03378c294111c62ab98d970ec747965c189b1d4e5298df",
+          "platform": "mac",
+          "arch": "arm64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.1-mac-x64.dmg",
+          "path": "downloads/1.0.1/Link-1.0.1-mac-x64.dmg",
+          "size": 142770803,
+          "sha256": "b061c5c0191defd5bb2ca822872631f62f39bf83ec71ac198fae670f8fe22ad1",
+          "platform": "mac",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.1-mac-arm64.zip",
+          "path": "downloads/1.0.1/Link-1.0.1-mac-arm64.zip",
+          "size": 131226508,
+          "sha256": "3d612f1f57568ac394366674efc7cca8977aed6815a2de72c2b7e34aa3fe3905",
+          "platform": "mac",
+          "arch": "arm64",
+          "kind": "archive"
+        },
+        {
+          "name": "Link-1.0.1-mac-x64.zip",
+          "path": "downloads/1.0.1/Link-1.0.1-mac-x64.zip",
+          "size": 138238754,
+          "sha256": "978b36d2aeeb358aef226092982b10c8dfbabf1fab831ecc306093675605d9a4",
+          "platform": "mac",
+          "arch": "x64",
+          "kind": "archive"
+        },
+        {
+          "name": "Link-1.0.1-linux-amd64.deb",
+          "path": "downloads/1.0.1/Link-1.0.1-linux-amd64.deb",
+          "size": 107963672,
+          "sha256": "4518d13bce38357d3f2630be1f7111d3645d2698f8a4dcd432e26af454f6a5c8",
+          "platform": "linux",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.1-linux-x86_64.AppImage",
+          "path": "downloads/1.0.1/Link-1.0.1-linux-x86_64.AppImage",
+          "size": 142467880,
+          "sha256": "b0df9ba8a51751c8953e6fd2125ef00dadca47e72cd5bc764eb7c2f03142b28e",
+          "platform": "linux",
           "arch": "x64",
           "kind": "portable"
         }
@@ -43,7 +99,8 @@
         "Initial Link release for Windows and macOS.",
         "Sidebar browsing, private tabs, themes, bookmarks, history and downloads.",
         "Built-in ad and tracker blocking, Tor VPN, flexible search and Chrome extension support.",
-        "Browser data imports and a local password manager."
+        "Browser data imports and a local password manager.",
+        "Linux x64 AppImage and Debian packages built from this version's original source."
       ],
       "notesText": "",
       "notesSource": "Initial-release summary based on the v1.0.0 source tag; the published release has no separate changelog.",
@@ -101,6 +158,24 @@
           "platform": "mac",
           "arch": "x64",
           "kind": "archive"
+        },
+        {
+          "name": "Link-1.0.0-linux-amd64.deb",
+          "path": "downloads/1.0.0/Link-1.0.0-linux-amd64.deb",
+          "size": 109328548,
+          "sha256": "e066f864556528ae4eeb67bd0cc4f7116b51c1186b424eecea56836785ac10cc",
+          "platform": "linux",
+          "arch": "x64",
+          "kind": "installer"
+        },
+        {
+          "name": "Link-1.0.0-linux-x86_64.AppImage",
+          "path": "downloads/1.0.0/Link-1.0.0-linux-x86_64.AppImage",
+          "size": 140461943,
+          "sha256": "dc17f2a0b7081fd041c63d149bdf38efe02e849fce755c9e123619debe740f34",
+          "platform": "linux",
+          "arch": "x64",
+          "kind": "portable"
         }
       ]
     }
