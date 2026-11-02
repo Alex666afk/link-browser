@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="site-nav" aria-label="Main navigation"><a class="wordmark" href="#">Link</a><div><a href="#features">Features</a><a href="#releases">Downloads &amp; updates</a></div></nav>
+  <nav class="site-nav" aria-label="Main navigation"><a class="wordmark" href="#">Link</a><div><a href="#features">Features</a><a href="#releases">Downloads &amp; updates</a><a href="#faq">Questions</a></div></nav>
   <header>
     <div class="identity"><img src="icon.png" width="44" height="44" alt=""><h1>Link</h1></div>
     <p>A free, open-source web browser for Windows, macOS and Linux.</p>
@@ -70,6 +70,15 @@
     <button class="secondary-button" id="release-retry" type="button" hidden>Retry loading downloads</button>
     <noscript><p>Enable JavaScript to browse all versions, or download the current Windows installer: <a href="downloads/1.0.1/Link-Setup-1.0.1.exe" download>Link 1.0.1 for Windows</a>.</p></noscript>
     <p class="install-help">Windows: open the installer, or run the portable build. macOS: open the DMG and drag Link into Applications. Linux: install the Debian package, or make the AppImage executable and run it.</p>
+  </section>
+  <section class="faq-section anchor-target" id="faq" aria-labelledby="faq-title">
+    <h2 id="faq-title">Questions</h2>
+    <details><summary>Is Link really free?</summary><p>Yes — free and open source under the MIT license. No ads, no account, no paid tier, and your data is never sold.</p></details>
+    <details><summary>Where does my data go?</summary><p>Your bookmarks, history and passwords stay on your computer. Passwords and cookies are encrypted with your operating system's keychain, and Link doesn't send your browsing anywhere.</p></details>
+    <details><summary>How does the built-in VPN work?</summary><p>Turn it on and your traffic routes through the Tor network. It's free with nothing to install — Link downloads a checksum-verified Tor client the first time. It's slower than a paid VPN, and some sites may ask you to solve a captcha.</p></details>
+    <details><summary>Why does my computer warn me when I open Link?</summary><p>Link isn't signed with a paid certificate yet, so Windows SmartScreen or macOS Gatekeeper may warn you. On Windows choose <strong>More info → Run anyway</strong>; on macOS use <strong>Open Anyway</strong> in Privacy &amp; Security. The full source is on GitHub if you'd like to inspect it first.</p></details>
+    <details><summary>Can I use my Chrome extensions?</summary><p>Yes. Install extensions straight from the Chrome Web Store, load unpacked folders, or import the ones you already use in Chrome, Edge or Brave.</p></details>
+    <details><summary>Can I bring my data from another browser?</summary><p>Yes — import bookmarks, history, passwords, cookies and extensions from Chrome, Edge, Brave, Firefox, Safari and more, or from exported files.</p></details>
   </section>
   <footer><span>Link · Free and open source</span><a href="https://github.com/Alex666afk/link-browser" target="_blank" rel="noopener noreferrer">Source code <span aria-hidden="true">&#8599;</span></a></footer>
 </div>
